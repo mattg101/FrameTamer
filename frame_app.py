@@ -389,6 +389,7 @@ class SourceCropper(QLabel):
     def mouseMoveEvent(self, event):
         if not self.scaled_pixmap: return
         pos = QPointF(event.pos())
+        
         if self.active_handle == self.H_NONE:
             h = self.get_handle_at(event.pos())
             cursors = {self.H_TL: Qt.CursorShape.SizeFDiagCursor, self.H_BR: Qt.CursorShape.SizeFDiagCursor,
@@ -464,11 +465,6 @@ class InteractiveMatEditor(QLabel):
             painter.setBrush(p['col_mat']); painter.drawRect(QRectF(start_x, start_y, total_w, total_h))
         
         if self.pixmap_original:
-            # FIX: Draw based on Print Size logic here for consistency? 
-            # Actually, Editor logic uses 'img_w' as visible art. 
-            # To match preview's border logic, we should probably scale relative to Print Size too, 
-            # but Editor is for "Visible" art. Let's keep Editor simple and let Preview handle the advanced border masking.
-            # But we must ensure it covers the hole.
             t_w, t_h = math.ceil(r_hole.width()), math.ceil(r_hole.height())
             scaled = self.pixmap_original.scaled(QSize(t_w, t_h), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
             sx, sy = (scaled.width() - r_hole.width()) / 2, (scaled.height() - r_hole.height()) / 2
@@ -587,13 +583,10 @@ class FramePreviewLabel(QLabel):
             painter.setBrush(p['col_mat']); painter.setPen(Qt.PenStyle.NoPen); painter.drawRect(inner_rect)
 
         # 3. Image
-        # FIX: Draw Image relative to PAPER size (p['print_w/h']), centered on the aperture.
-        # This allows the mat to cover the borders if 'Print Border' is set.
-        
+        # Draw Image relative to PAPER size (p['print_w/h']), centered on the aperture.
         aperture_cx = inner_rect.center().x() + (p['mat_left'] - p['mat_right']) * scale / 2
         aperture_cy = inner_rect.center().y() + (p['mat_top'] - p['mat_bottom']) * scale / 2
         
-        # Calculate where the full Paper should be drawn
         paper_w_px = p['print_w'] * scale
         paper_h_px = p['print_h'] * scale
         
@@ -609,12 +602,10 @@ class FramePreviewLabel(QLabel):
             scaled = orig.copy(crop_px).scaled(QSize(t_w, t_h), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
             
             painter.save()
-            # Clip to the aperture (hole) so we don't draw outside the mat area
             img_clip_rect = QRectF(inner_rect.x() + p['mat_left']*scale, inner_rect.y() + p['mat_top']*scale, 
                                    p['img_w']*scale, p['img_h']*scale)
             painter.setClipRect(img_clip_rect)
             
-            # Center the scaled image (which is paper size) on the target rect
             sx = (scaled.width() - paper_rect.width()) / 2
             sy = (scaled.height() - paper_rect.height()) / 2
             
@@ -687,9 +678,10 @@ class FrameApp(QMainWindow):
         v_units.addWidget(self.rb_imp); v_units.addWidget(self.rb_met)
         h_top.addLayout(v_units); self.c_layout.addLayout(h_top)
 
-        self.gb_frame = QGroupBox("Inner Frame Dimensions"); gl_f = QGridLayout()
-        self.spin_iw = self._add_spin(gl_f, 0, "Inner Width:", 16.0)
-        self.spin_ih = self._add_spin(gl_f, 1, "Inner Height:", 20.0)
+        # Updated GroupBox title
+        self.gb_frame = QGroupBox("Frame Aperture (Visible Opening)"); gl_f = QGridLayout()
+        self.spin_iw = self._add_spin(gl_f, 0, "Aperture Width:", 16.0)
+        self.spin_ih = self._add_spin(gl_f, 1, "Aperture Height:", 20.0)
         self.gb_frame.setLayout(gl_f); self.c_layout.addWidget(self.gb_frame)
 
         self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout()
@@ -913,44 +905,68 @@ class FrameApp(QMainWindow):
         to_in = 1.0 if self.unit == "in" else 1/25.4
 
         if self.rb_mode_frame.isChecked():
-            vis_w, vis_h = self.spin_iw.value() - 2*rabbet, self.spin_ih.value() - 2*rabbet
+            # FRAME MODE: Inputs are now VISIBLE APERTURE SIZE
+            vis_w, vis_h = self.spin_iw.value(), self.spin_ih.value()
             if vis_w <= 0 or vis_h <= 0: return
+            
+            # Mat Rules
             m_t = m_b = m_l = m_r = self.spin_min_gutter.value()
             fix_val = self.spin_fix_val.value(); idx = self.combo_fix.currentIndex()
             if idx == 1: m_t = fix_val
             elif idx == 2: m_b = fix_val
             elif idx == 3: m_l = fix_val
             elif idx == 4: m_r = fix_val
+            
             if self.chk_link.isChecked():
                 if idx == 1: m_b = m_t
                 elif idx == 2: m_t = m_b
                 elif idx == 3: m_r = m_l
                 elif idx == 4: m_l = m_r
+
+            # Fit Art
             avail_w, avail_h = vis_w - m_l - m_r, vis_h - m_t - m_b
             if avail_w <= 0 or avail_h <= 0: self.lbl_stats.setText("Mat too large!"); return
+
             final_w, final_h = avail_w, avail_h
             if self.pixmap_full:
                 aspect = (self.current_crop.width() * self.pixmap_full.width()) / (self.current_crop.height() * self.pixmap_full.height())
                 if (avail_w / avail_h) > aspect: final_w = avail_h * aspect
                 else: final_h = avail_w / aspect
+
+            # Align
             rem_w, rem_h = avail_w - final_w, avail_h - final_h
             align = self.combo_align.currentIndex()
             xl = rem_w/2 if align == 0 else (rem_w if align == 2 else 0)
             yt = rem_h/2 if align == 0 else (rem_h if align == 2 else 0)
+            
             fmt, fmb, fml, fmr = m_t + yt, vis_h - (m_t+yt) - final_h, m_l + xl, vis_w - (m_l+xl) - final_w
-            iw, ih = self.spin_iw.value(), self.spin_ih.value()
-            mat_cut_w, mat_cut_h = iw - tol, ih - tol
-            ow, oh = iw + 2*(face-rabbet), ih + 2*(face-rabbet)
+            
+            # Glass size calculation
+            glass_w = vis_w + 2*rabbet
+            glass_h = vis_h + 2*rabbet
+            
+            mat_cut_w, mat_cut_h = glass_w - tol, glass_h - tol
+            ow, oh = glass_w + 2*(face-rabbet), glass_h + 2*(face-rabbet)
         else:
+            # ART MODE
             final_w, final_h = self.spin_art_w.value() - 2*(rabbet if self.chk_no_mat.isChecked() else p_border), self.spin_art_h.value() - 2*(rabbet if self.chk_no_mat.isChecked() else p_border)
             if final_w <= 0 or final_h <= 0: self.lbl_stats.setText("Border/Overlap too large!"); return
+            
             if self.chk_no_mat.isChecked(): fmt = fmb = fml = fmr = 0
             else: fmt, fmb, fml, fmr = self.spin_mat_t.value(), self.spin_mat_b.value(), self.spin_mat_l.value(), self.spin_mat_r.value()
-            iw, ih = final_w + fml + fmr + 2*rabbet, final_h + fmt + fmb + 2*rabbet
-            mat_cut_w, mat_cut_h = iw - tol, ih - tol
-            ow, oh = iw + 2*(face-rabbet), ih + 2*(face-rabbet)
+            
+            vis_w = final_w + fml + fmr
+            vis_h = final_h + fmt + fmb
+            
+            # Glass size calculation
+            glass_w = vis_w + 2*rabbet
+            glass_h = vis_h + 2*rabbet
+            
+            mat_cut_w, mat_cut_h = glass_w - tol, glass_h - tol
+            ow, oh = glass_w + 2*(face-rabbet), glass_h + 2*(face-rabbet)
 
         hidden = rabbet - (tol/2.0)
+        
         self.last_calc = {
             'unit': self.unit, 'cut_w': mat_cut_w * to_in, 'cut_h': mat_cut_h * to_in,
             'mat_top': fmt * to_in, 'mat_bottom': fmb * to_in, 'mat_left': fml * to_in, 'mat_right': fmr * to_in,
@@ -965,6 +981,7 @@ class FrameApp(QMainWindow):
         }
         
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
+        
         u = self.unit
         self.lbl_stats.setText(
             f"<b>OUTER FRAME SIZE:</b><br>{UnitUtils.format_dual(ow * to_in, u)} x {UnitUtils.format_dual(oh * to_in, u)}<br><br>"
