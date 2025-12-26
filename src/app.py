@@ -8,14 +8,14 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QGroupBox, QGridLayout, QDoubleSpinBox, QComboBox, QCheckBox, 
                              QSizePolicy, QFormLayout, QButtonGroup, QStackedWidget, 
                              QScrollArea, QFrame, QMessageBox, QRadioButton)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QSize
+from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings
 from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, 
                          QPolygonF, QFont, QImageReader, QPageSize)
 
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
 from .utils import UnitUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel
-from .dialogs import TextureSamplerDialog
+from .dialogs import TextureSamplerDialog, TextureLibraryDialog
 
 class FrameApp(QMainWindow):
     def __init__(self):
@@ -33,7 +33,46 @@ class FrameApp(QMainWindow):
         self.unit_inputs = [] 
         
         self.setup_ui()
+        self.load_settings()
         self.load_rick_roll()
+
+    def load_settings(self):
+        settings = QSettings("MattG", "FrameTamer")
+        self.updating_ui = True
+        
+        # Load numbers
+        self.spin_iw.setValue(float(settings.value("aperture_w", 16.0)))
+        self.spin_ih.setValue(float(settings.value("aperture_h", 20.0)))
+        self.spin_face.setValue(float(settings.value("face_w", 0.75)))
+        self.spin_rabbet.setValue(float(settings.value("rabbet_w", 0.25)))
+        self.spin_print_border.setValue(float(settings.value("print_border", 0.25)))
+        
+        # Load colors
+        mat_col = settings.value("mat_color")
+        if mat_col: self.mat_color = QColor(mat_col)
+        frame_col = settings.value("frame_color")
+        if frame_col: self.frame_color = QColor(frame_col)
+        
+        # Load units
+        unit = settings.value("unit", "in")
+        if unit == "mm": self.rb_met.setChecked(True)
+        else: self.rb_imp.setChecked(True)
+        self.unit = unit
+        
+        self.updating_ui = False
+        self.recalc()
+
+    def closeEvent(self, event):
+        settings = QSettings("MattG", "FrameTamer")
+        settings.setValue("aperture_w", self.spin_iw.value())
+        settings.setValue("aperture_h", self.spin_ih.value())
+        settings.setValue("face_w", self.spin_face.value())
+        settings.setValue("rabbet_w", self.spin_rabbet.value())
+        settings.setValue("print_border", self.spin_print_border.value())
+        settings.setValue("mat_color", self.mat_color.name())
+        settings.setValue("frame_color", self.frame_color.name())
+        settings.setValue("unit", self.unit)
+        super().closeEvent(event)
 
     def setup_ui(self):
         central = QWidget(); self.setCentralWidget(central)
@@ -77,6 +116,8 @@ class FrameApp(QMainWindow):
         self.gb_frame = QGroupBox("Frame Aperture (Visible Opening)"); gl_f = QGridLayout()
         self.spin_iw = self._add_spin(gl_f, 0, "Aperture Width:", 16.0)
         self.spin_ih = self._add_spin(gl_f, 1, "Aperture Height:", 20.0)
+        btn_swap = QPushButton("Swap W/H"); btn_swap.clicked.connect(self.swap_frame_dims)
+        gl_f.addWidget(btn_swap, 2, 0, 1, 2)
         self.gb_frame.setLayout(gl_f); self.c_layout.addWidget(self.gb_frame)
 
         self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout()
@@ -128,10 +169,17 @@ class FrameApp(QMainWindow):
         h_col = QHBoxLayout(); 
         b_mc = QPushButton("Mat Color"); b_mc.clicked.connect(self.pick_mat)
         b_fc = QPushButton("Frame Color"); b_fc.clicked.connect(self.pick_frame)
-        self.b_ft = QPushButton("Load Frame Texture"); self.b_ft.clicked.connect(self.load_frame_texture)
         
         h_col.addWidget(b_mc); h_col.addWidget(b_fc)
-        self.c_layout.addLayout(h_col); self.c_layout.addWidget(self.b_ft)
+        self.c_layout.addLayout(h_col)
+        
+        h_tex = QHBoxLayout()
+        self.btn_extract_tex = QPushButton("Extract Texture")
+        self.btn_extract_tex.clicked.connect(self.load_frame_texture)
+        self.btn_lib_tex = QPushButton("Library")
+        self.btn_lib_tex.clicked.connect(self.select_from_library)
+        h_tex.addWidget(self.btn_extract_tex); h_tex.addWidget(self.btn_lib_tex)
+        self.c_layout.addLayout(h_tex)
 
         gb_mnt = QGroupBox("Mounting"); l_mnt = QFormLayout()
         self.spin_print_border = self._create_spin(0.25); l_mnt.addRow("Print Border:", self.spin_print_border)
@@ -236,6 +284,13 @@ class FrameApp(QMainWindow):
         self.updating_ui = False
         self.recalc()
 
+    def swap_frame_dims(self):
+        self.updating_ui = True
+        w, h = self.spin_iw.value(), self.spin_ih.value()
+        self.spin_iw.setValue(h); self.spin_ih.setValue(w)
+        self.updating_ui = False
+        self.recalc()
+
     def on_art_w_changed(self):
         if not self.updating_ui: 
             if self.spin_art_w.hasFocus(): self.rb_driver_w.setChecked(True)
@@ -281,7 +336,19 @@ class FrameApp(QMainWindow):
         dlg = TextureSamplerDialog(self)
         if dlg.exec():
             tex = dlg.get_texture()
-            if tex: self.frame_texture = tex; self.b_ft.setText("Texture Loaded (Clear?)"); self.recalc()
+            if tex: 
+                self.frame_texture = tex
+                self.btn_extract_tex.setText("Texture Loaded")
+                self.recalc()
+
+    def select_from_library(self):
+        dlg = TextureLibraryDialog(self)
+        if dlg.exec():
+            tex = dlg.get_selected_texture()
+            if tex:
+                self.frame_texture = tex
+                self.btn_extract_tex.setText("Texture Loaded")
+                self.recalc()
 
     def toggle_units(self):
         if not self.sender().isChecked(): return
@@ -302,7 +369,11 @@ class FrameApp(QMainWindow):
         if c.isValid(): self.mat_color = c; self.recalc()
     def pick_frame(self): 
         c = QColorDialog.getColor(self.frame_color); 
-        if c.isValid(): self.frame_color = c; self.frame_texture = None; self.b_ft.setText("Load Frame Texture"); self.recalc()
+        if c.isValid(): 
+            self.frame_color = c
+            self.frame_texture = None
+            self.btn_extract_tex.setText("Extract Texture")
+            self.recalc()
 
     def recalc(self):
         if self.updating_ui: return
@@ -409,14 +480,14 @@ class FrameApp(QMainWindow):
                   f"PRINT SIZE: {UnitUtils.format_dual(d['print_w'], u)} x {UnitUtils.format_dual(d['print_h'], u)}"]:
             painter.drawText(100, int(y), l); y += h
         
-        avail_w, avail_h = writer.width(), writer.height() - y - 500
-        scale = min(avail_w * 0.8 / d['cut_w'], avail_h * 0.8 / d['cut_h'])
-        ox, oy = (avail_w - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2
+        avail_w, avail_h = writer.width(), writer.height() - y - 1000
+        scale = min(avail_w * 0.75 / d['cut_w'], avail_h * 0.75 / d['cut_h'])
+        ox, oy = (writer.width() - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2 + 200
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
         painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
         painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+d['img_w']*scale, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -200, False)
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+d['img_h']*scale), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -200, True)
+        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+d['img_w']*scale, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -300, False)
+        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+d['img_h']*scale), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -300, True)
 
         # Page 2: Final Preview
         writer.newPage()
@@ -432,4 +503,3 @@ class FrameApp(QMainWindow):
             painter.drawPixmap(int(px), int(py), scaled_p)
 
         painter.end()
-        QMessageBox.information(self, "Export", f"Blueprint and Preview saved to {fn}")

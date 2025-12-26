@@ -1,7 +1,9 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                             QPushButton, QFileDialog, QSlider, QSizePolicy)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform
+                             QPushButton, QFileDialog, QSlider, QSizePolicy,
+                             QInputDialog, QListWidget, QListWidgetItem, QAbstractItemView)
+from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent, QSize
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon
+import os
 
 class TextureSamplerDialog(QDialog):
     def __init__(self, parent=None):
@@ -62,7 +64,20 @@ class TextureSamplerDialog(QDialog):
         btn_ok.setStyleSheet("background-color: #0078d7; font-weight: bold; padding: 5px 15px;")
         h_ctrl.addWidget(btn_ok)
         
+        btn_save = QPushButton("Save to Library"); btn_save.clicked.connect(self.save_to_library)
+        btn_save.setStyleSheet("background-color: #28a745; color: white; padding: 5px 15px;")
+        h_ctrl.addWidget(btn_save)
+        
         layout.addLayout(h_ctrl)
+
+    def save_to_library(self):
+        tex = self.get_texture()
+        if not tex: return
+        name, ok = QInputDialog.getText(self, "Save Texture", "Texture Name:")
+        if ok and name:
+            if not os.path.exists("textures"): os.makedirs("textures")
+            path = os.path.join("textures", f"{name}.png")
+            tex.save(path)
 
     def load_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
@@ -202,3 +217,45 @@ class TextureSamplerDialog(QDialog):
         return self.pixmap_rotated.copy(r)
     
     def resizeEvent(self, event): self.update_display(); super().resizeEvent(event)
+
+class TextureLibraryDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Texture Library")
+        self.resize(600, 400)
+        self.selected_texture = None
+        
+        layout = QVBoxLayout(self)
+        self.list_widget = QListWidget()
+        self.list_widget.setViewMode(QListWidget.ViewMode.IconMode)
+        self.list_widget.setIconSize(QSize(100, 100))
+        self.list_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.list_widget.setMovement(QListWidget.Movement.Static)
+        self.list_widget.setSpacing(10)
+        layout.addWidget(self.list_widget)
+        
+        btn_layout = QHBoxLayout()
+        btn_select = QPushButton("Select"); btn_select.clicked.connect(self.accept)
+        btn_cancel = QPushButton("Cancel"); btn_cancel.clicked.connect(self.reject)
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_cancel); btn_layout.addWidget(btn_select)
+        layout.addLayout(btn_layout)
+        
+        self.load_library()
+        
+    def load_library(self):
+        if not os.path.exists("textures"): return
+        for fn in os.listdir("textures"):
+            if fn.lower().endswith(".png"):
+                path = os.path.join("textures", fn)
+                pix = QPixmap(path)
+                item = QListWidgetItem(fn[:-4])
+                item.setIcon(QIcon(pix))
+                item.setData(Qt.ItemDataRole.UserRole, path)
+                self.list_widget.addItem(item)
+                
+    def get_selected_texture(self):
+        item = self.list_widget.currentItem()
+        if item:
+            return QPixmap(item.data(Qt.ItemDataRole.UserRole))
+        return None
