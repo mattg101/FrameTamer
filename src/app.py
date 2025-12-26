@@ -60,6 +60,13 @@ class FrameApp(QMainWindow):
         else: self.rb_imp.setChecked(True)
         self.unit = unit
         
+        # Load Mat Rules
+        self.combo_fix.setCurrentIndex(int(settings.value("mat_fix_id", 0)))
+        self.spin_fix_val.setValue(float(settings.value("mat_fixed_val", 2.0)))
+        self.chk_link.setChecked(settings.value("mat_match_opp", "true") == "true")
+        self.spin_min_gutter.setValue(float(settings.value("mat_gutter", 0.125)))
+        self.combo_align.setCurrentIndex(int(settings.value("mat_align_id", 0)))
+        
         self.updating_ui = False
         self.recalc()
 
@@ -94,6 +101,22 @@ class FrameApp(QMainWindow):
         self.update_ui_visibility()
 
     def setup_controls_content(self):
+        # Defaults Editor at Top
+        self.btn_defaults_mode = QPushButton("Editor: Defaults Mode [OFF]")
+        self.btn_defaults_mode.setCheckable(True)
+        self.btn_defaults_mode.clicked.connect(self.toggle_defaults_mode)
+        self.btn_defaults_mode.setStyleSheet("padding: 8px; font-weight: bold;")
+        self.c_layout.addWidget(self.btn_defaults_mode)
+
+        self.btn_save_defaults = QPushButton("Save Current as Defaults")
+        self.btn_save_defaults.clicked.connect(self.save_as_defaults)
+        self.btn_save_defaults.setStyleSheet("background-color: #ffc107; color: black; font-weight: bold; padding: 8px;")
+        self.btn_save_defaults.hide()
+        self.c_layout.addWidget(self.btn_save_defaults)
+        
+        line = QFrame(); line.setFrameShape(QFrame.Shape.HLine); line.setFrameShadow(QFrame.Shadow.Sunken)
+        self.c_layout.addWidget(line)
+
         gb_mode = QGroupBox("Workflow Mode"); l_mode = QVBoxLayout()
         self.rb_mode_frame = QRadioButton("Fixed Frame (Fit Art)"); self.rb_mode_frame.setChecked(True)
         self.rb_mode_frame.toggled.connect(self.update_ui_visibility)
@@ -201,18 +224,6 @@ class FrameApp(QMainWindow):
         btn_pdf = QPushButton("Export Mat Blueprint (PDF)"); btn_pdf.setStyleSheet("background-color: #d83b01; font-weight: bold; margin-top: 20px; padding: 10px; color: white;")
         btn_pdf.clicked.connect(self.export_pdf); self.c_layout.addWidget(btn_pdf)
         
-        self.btn_defaults_mode = QPushButton("Editor: Defaults Mode [OFF]")
-        self.btn_defaults_mode.setCheckable(True)
-        self.btn_defaults_mode.clicked.connect(self.toggle_defaults_mode)
-        self.btn_defaults_mode.setStyleSheet("margin-top: 10px; padding: 5px;")
-        self.c_layout.addWidget(self.btn_defaults_mode)
-
-        self.btn_save_defaults = QPushButton("Save Current as Defaults")
-        self.btn_save_defaults.clicked.connect(self.save_as_defaults)
-        self.btn_save_defaults.setStyleSheet("background-color: #ffc107; color: black; font-weight: bold; padding: 5px;")
-        self.btn_save_defaults.hide()
-        self.c_layout.addWidget(self.btn_save_defaults)
-        
         self.c_layout.addStretch()
 
     def _create_spin(self, val):
@@ -305,7 +316,8 @@ class FrameApp(QMainWindow):
         self.btn_save_defaults.setVisible(self.defaults_mode)
         
         # Define fields that are "defaults"
-        default_fields = [self.spin_iw, self.spin_ih, self.spin_face, self.spin_rabbet, self.spin_print_border]
+        default_fields = [self.spin_iw, self.spin_ih, self.spin_face, self.spin_rabbet, self.spin_print_border,
+                          self.combo_fix, self.spin_fix_val, self.chk_link, self.spin_min_gutter, self.combo_align]
         highlight = "border: 2px solid #ffc107; background: #3a3a20;" if self.defaults_mode else ""
         for f in default_fields: f.setStyleSheet(highlight)
 
@@ -319,6 +331,14 @@ class FrameApp(QMainWindow):
         settings.setValue("mat_color", self.mat_color.name())
         settings.setValue("frame_color", self.frame_color.name())
         settings.setValue("unit", self.unit)
+        
+        # Mat Rules
+        settings.setValue("mat_fix_id", self.combo_fix.currentIndex())
+        settings.setValue("mat_fixed_val", self.spin_fix_val.value())
+        settings.setValue("mat_match_opp", self.chk_link.isChecked())
+        settings.setValue("mat_gutter", self.spin_min_gutter.value())
+        settings.setValue("mat_align_id", self.combo_align.currentIndex())
+        
         QMessageBox.information(self, "Defaults Saved", "Current values set as application defaults.")
 
     def refresh_preset_list(self):
