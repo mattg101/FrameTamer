@@ -389,7 +389,6 @@ class SourceCropper(QLabel):
     def mouseMoveEvent(self, event):
         if not self.scaled_pixmap: return
         pos = QPointF(event.pos())
-        
         if self.active_handle == self.H_NONE:
             h = self.get_handle_at(event.pos())
             cursors = {self.H_TL: Qt.CursorShape.SizeFDiagCursor, self.H_BR: Qt.CursorShape.SizeFDiagCursor,
@@ -437,8 +436,7 @@ class InteractiveMatEditor(QLabel):
 
     def get_view_metrics(self):
         if not self.params: return 0, 0, 0
-        w, h = self.width() - 20, self.height() - 20
-        scale = get_fit_metrics(w, h, self.params['outer_w'], self.params['outer_h'])
+        scale = get_fit_metrics(self.width()-20, self.height()-20, self.params['outer_w'], self.params['outer_h'])
         return scale, self.width() / 2, self.height() / 2
 
     def paintEvent(self, event):
@@ -454,7 +452,6 @@ class InteractiveMatEditor(QLabel):
         total_w = (p['img_w'] + p['mat_left'] + p['mat_right']) * scale
         total_h = (p['img_h'] + p['mat_top'] + p['mat_bottom']) * scale
         start_x, start_y = cx - total_w / 2, cy - total_h / 2
-        
         r_hole = QRectF(start_x + p['mat_left']*scale, start_y + p['mat_top']*scale, p['img_w']*scale, p['img_h']*scale)
         face_px = p['frame_face'] * scale
 
@@ -550,7 +547,6 @@ class FramePreviewLabel(QLabel):
         painter = QPainter(final)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # 1. DRAW FRAME (Color or Texture)
         outer_rect = QRectF(0, 0, render_w, render_h)
         inner_rect = QRectF(face_px, face_px, render_w - 2*face_px, render_h - 2*face_px)
         
@@ -578,12 +574,10 @@ class FramePreviewLabel(QLabel):
         else:
             painter.setBrush(p['col_frame']); painter.drawRect(outer_rect)
 
-        # 2. Mat
         if not p.get('no_mat', False):
             painter.setBrush(p['col_mat']); painter.setPen(Qt.PenStyle.NoPen); painter.drawRect(inner_rect)
 
-        # 3. Image
-        # Draw Image relative to PAPER size (p['print_w/h']), centered on the aperture.
+        # Image centered on visible aperture
         aperture_cx = inner_rect.center().x() + (p['mat_left'] - p['mat_right']) * scale / 2
         aperture_cy = inner_rect.center().y() + (p['mat_top'] - p['mat_bottom']) * scale / 2
         
@@ -605,10 +599,8 @@ class FramePreviewLabel(QLabel):
             img_clip_rect = QRectF(inner_rect.x() + p['mat_left']*scale, inner_rect.y() + p['mat_top']*scale, 
                                    p['img_w']*scale, p['img_h']*scale)
             painter.setClipRect(img_clip_rect)
-            
             sx = (scaled.width() - paper_rect.width()) / 2
             sy = (scaled.height() - paper_rect.height()) / 2
-            
             painter.drawPixmap(int(paper_rect.x() - sx), int(paper_rect.y() - sy), scaled)
             painter.restore()
 
@@ -637,6 +629,7 @@ class FrameApp(QMainWindow):
         self.last_calc = {}
         self.updating_ui = False
         self.unit_inputs = [] 
+        
         self.setup_ui()
         self.load_rick_roll()
 
@@ -678,7 +671,6 @@ class FrameApp(QMainWindow):
         v_units.addWidget(self.rb_imp); v_units.addWidget(self.rb_met)
         h_top.addLayout(v_units); self.c_layout.addLayout(h_top)
 
-        # Updated GroupBox title
         self.gb_frame = QGroupBox("Frame Aperture (Visible Opening)"); gl_f = QGridLayout()
         self.spin_iw = self._add_spin(gl_f, 0, "Aperture Width:", 16.0)
         self.spin_ih = self._add_spin(gl_f, 1, "Aperture Height:", 20.0)
@@ -749,7 +741,7 @@ class FrameApp(QMainWindow):
         btn_pdf.clicked.connect(self.export_pdf); self.c_layout.addWidget(btn_pdf); self.c_layout.addStretch()
 
     def _create_spin(self, val):
-        s = QDoubleSpinBox(); s.setRange(0, 99999); s.setValue(val); s.valueChanged.connect(self.recalc)
+        s = QDoubleSpinBox(); s.setRange(0, 99999); s.setDecimals(3); s.setValue(val); s.valueChanged.connect(self.recalc)
         self.unit_inputs.append(s); return s
 
     def _add_spin(self, layout, row, label, val, extra=None):
@@ -782,30 +774,17 @@ class FrameApp(QMainWindow):
     def load_rick_roll(self):
         fn = "rick_default.png"
         if os.path.exists(fn) and os.path.getsize(fn) == 0: os.remove(fn)
-
         if not os.path.exists(fn):
-            print(f"Downloading: {RICK_ROLL_URL}")
             try:
                 ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
                 req = Request(RICK_ROLL_URL, headers={'User-Agent': 'Mozilla/5.0'})
                 with urlopen(req, context=ctx) as u, open(fn, 'wb') as f: f.write(u.read())
-                print("Download success.")
             except Exception as e:
-                print(f"Download Error: {e}")
-                # FALLBACK: ASCII RICK
-                pm = QPixmap(800, 600); pm.fill(QColor(20, 20, 20))
-                p = QPainter(pm)
+                pm = QPixmap(800, 600); pm.fill(QColor(20, 20, 20)); p = QPainter(pm)
                 font = QFont("Consolas", 14); font.setStyleHint(QFont.StyleHint.Monospace)
-                p.setFont(font); p.setPen(QColor(0, 255, 0))
-                p.drawText(QRectF(0,0,800,600), Qt.AlignmentFlag.AlignCenter, RICK_ASCII)
-                p.end(); pm.save(fn)
-
+                p.setFont(font); p.setPen(QColor(0, 255, 0)); p.drawText(QRectF(0,0,800,600), Qt.AlignmentFlag.AlignCenter, RICK_ASCII); p.end(); pm.save(fn)
         if os.path.exists(fn):
-            self.pixmap_full = QPixmap(fn)
-            self.editor_cropper.set_image(self.pixmap_full)
-            self.editor_mat.set_image(self.pixmap_full)
-            self.current_crop = QRectF(0,0,1,1)
-            self.recalc_aspect()
+            self.pixmap_full = QPixmap(fn); self.editor_cropper.set_image(self.pixmap_full); self.editor_mat.set_image(self.pixmap_full); self.recalc_aspect()
 
     # --- LOGIC ---
     def update_ui_visibility(self):
@@ -869,16 +848,12 @@ class FrameApp(QMainWindow):
         dlg = TextureSamplerDialog(self)
         if dlg.exec():
             tex = dlg.get_texture()
-            if tex:
-                self.frame_texture = tex
-                self.b_ft.setText("Texture Loaded (Clear?)")
-                self.recalc()
+            if tex: self.frame_texture = tex; self.b_ft.setText("Texture Loaded (Clear?)"); self.recalc()
 
     def toggle_units(self):
         if not self.sender().isChecked(): return
         target = "mm" if self.rb_met.isChecked() else "in"
         if target == self.unit: return
-        
         factor = 25.4 if target == "mm" else 1/25.4
         self.updating_ui = True
         for s in self.unit_inputs: s.setValue(s.value() * factor)
@@ -887,7 +862,6 @@ class FrameApp(QMainWindow):
     def toggle_grids(self):
         for e in [self.editor_cropper, self.editor_mat]: e.set_grid_enabled(self.chk_grid_src.isChecked())
         self.preview.set_grid_enabled(self.chk_grid_prev.isChecked())
-        self.editor_cropper.update_params(self.last_calc) 
 
     def on_crop_change(self, rect): self.current_crop = rect; self.recalc()
     def pick_mat(self): 
@@ -895,8 +869,7 @@ class FrameApp(QMainWindow):
         if c.isValid(): self.mat_color = c; self.recalc()
     def pick_frame(self): 
         c = QColorDialog.getColor(self.frame_color); 
-        if c.isValid(): 
-            self.frame_color = c; self.frame_texture = None; self.b_ft.setText("Load Frame Texture"); self.recalc()
+        if c.isValid(): self.frame_color = c; self.frame_texture = None; self.b_ft.setText("Load Frame Texture"); self.recalc()
 
     def recalc(self):
         if self.updating_ui: return
@@ -905,68 +878,45 @@ class FrameApp(QMainWindow):
         to_in = 1.0 if self.unit == "in" else 1/25.4
 
         if self.rb_mode_frame.isChecked():
-            # FRAME MODE: Inputs are now VISIBLE APERTURE SIZE
             vis_w, vis_h = self.spin_iw.value(), self.spin_ih.value()
             if vis_w <= 0 or vis_h <= 0: return
-            
-            # Mat Rules
             m_t = m_b = m_l = m_r = self.spin_min_gutter.value()
             fix_val = self.spin_fix_val.value(); idx = self.combo_fix.currentIndex()
             if idx == 1: m_t = fix_val
             elif idx == 2: m_b = fix_val
             elif idx == 3: m_l = fix_val
             elif idx == 4: m_r = fix_val
-            
             if self.chk_link.isChecked():
                 if idx == 1: m_b = m_t
                 elif idx == 2: m_t = m_b
                 elif idx == 3: m_r = m_l
                 elif idx == 4: m_l = m_r
-
-            # Fit Art
             avail_w, avail_h = vis_w - m_l - m_r, vis_h - m_t - m_b
             if avail_w <= 0 or avail_h <= 0: self.lbl_stats.setText("Mat too large!"); return
-
             final_w, final_h = avail_w, avail_h
             if self.pixmap_full:
                 aspect = (self.current_crop.width() * self.pixmap_full.width()) / (self.current_crop.height() * self.pixmap_full.height())
                 if (avail_w / avail_h) > aspect: final_w = avail_h * aspect
                 else: final_h = avail_w / aspect
-
-            # Align
             rem_w, rem_h = avail_w - final_w, avail_h - final_h
             align = self.combo_align.currentIndex()
             xl = rem_w/2 if align == 0 else (rem_w if align == 2 else 0)
             yt = rem_h/2 if align == 0 else (rem_h if align == 2 else 0)
-            
             fmt, fmb, fml, fmr = m_t + yt, vis_h - (m_t+yt) - final_h, m_l + xl, vis_w - (m_l+xl) - final_w
-            
-            # Glass size calculation
-            glass_w = vis_w + 2*rabbet
-            glass_h = vis_h + 2*rabbet
-            
+            glass_w, glass_h = vis_w + 2*rabbet, vis_h + 2*rabbet
             mat_cut_w, mat_cut_h = glass_w - tol, glass_h - tol
             ow, oh = glass_w + 2*(face-rabbet), glass_h + 2*(face-rabbet)
         else:
-            # ART MODE
             final_w, final_h = self.spin_art_w.value() - 2*(rabbet if self.chk_no_mat.isChecked() else p_border), self.spin_art_h.value() - 2*(rabbet if self.chk_no_mat.isChecked() else p_border)
-            if final_w <= 0 or final_h <= 0: self.lbl_stats.setText("Border/Overlap too large!"); return
-            
+            if final_w <= 0 or final_h <= 0: self.lbl_stats.setText("Border too large!"); return
             if self.chk_no_mat.isChecked(): fmt = fmb = fml = fmr = 0
             else: fmt, fmb, fml, fmr = self.spin_mat_t.value(), self.spin_mat_b.value(), self.spin_mat_l.value(), self.spin_mat_r.value()
-            
-            vis_w = final_w + fml + fmr
-            vis_h = final_h + fmt + fmb
-            
-            # Glass size calculation
-            glass_w = vis_w + 2*rabbet
-            glass_h = vis_h + 2*rabbet
-            
+            vis_w, vis_h = final_w + fml + fmr, final_h + fmt + fmb
+            glass_w, glass_h = vis_w + 2*rabbet, vis_h + 2*rabbet
             mat_cut_w, mat_cut_h = glass_w - tol, glass_h - tol
             ow, oh = glass_w + 2*(face-rabbet), glass_h + 2*(face-rabbet)
 
         hidden = rabbet - (tol/2.0)
-        
         self.last_calc = {
             'unit': self.unit, 'cut_w': mat_cut_w * to_in, 'cut_h': mat_cut_h * to_in,
             'mat_top': fmt * to_in, 'mat_bottom': fmb * to_in, 'mat_left': fml * to_in, 'mat_right': fmr * to_in,
@@ -975,13 +925,9 @@ class FrameApp(QMainWindow):
             'print_w': (final_w + 2*p_border)*to_in, 'print_h': (final_h + 2*p_border)*to_in, 'p_border': p_border*to_in,
             'outer_w': ow * to_in, 'outer_h': oh * to_in, 'frame_face': face * to_in, 
             'pixmap': self.pixmap_full, 'crop_rect': self.current_crop, 'col_mat': self.mat_color, 'col_frame': self.frame_color,
-            'frame_texture': self.frame_texture,
-            'no_mat': self.chk_no_mat.isChecked() if self.rb_mode_art.isChecked() else False,
-            'link_all': self.chk_link_all.isChecked()
+            'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.rb_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked()
         }
-        
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
-        
         u = self.unit
         self.lbl_stats.setText(
             f"<b>OUTER FRAME SIZE:</b><br>{UnitUtils.format_dual(ow * to_in, u)} x {UnitUtils.format_dual(oh * to_in, u)}<br><br>"
@@ -989,24 +935,18 @@ class FrameApp(QMainWindow):
             f"<b>APERTURE:</b><br>{UnitUtils.format_dual(self.last_calc['img_w'], u)} x {UnitUtils.format_dual(self.last_calc['img_h'], u)}<br><br>"
             f"<b>PRINT SIZE:</b><br>{UnitUtils.format_dual(self.last_calc['print_w'], u)} x {UnitUtils.format_dual(self.last_calc['print_h'], u)}"
         )
-
+        
     def draw_dimension(self, p, start, end, text, offset, is_vert):
-        p.setPen(QPen(Qt.GlobalColor.black, 3)); p.setBrush(Qt.BrushStyle.NoBrush)
-        p.setFont(QFont(p.font().family(), 10))
+        p.setPen(QPen(Qt.GlobalColor.black, 3)); p.setBrush(Qt.BrushStyle.NoBrush); p.setFont(QFont(p.font().family(), 10))
         if is_vert:
             x_line = start.x() + offset
-            p.drawLine(QPointF(start.x()-10, start.y()), QPointF(x_line+10, start.y())) 
-            p.drawLine(QPointF(start.x()-10, end.y()), QPointF(x_line+10, end.y()))      
-            p.drawLine(QPointF(x_line, start.y()), QPointF(x_line, end.y()))
+            p.drawLine(QPointF(start.x()-10, start.y()), QPointF(x_line+10, start.y())); p.drawLine(QPointF(start.x()-10, end.y()), QPointF(x_line+10, end.y())); p.drawLine(QPointF(x_line, start.y()), QPointF(x_line, end.y()))
             self.draw_arrow(p, QPointF(x_line, start.y()), "up"); self.draw_arrow(p, QPointF(x_line, end.y()), "down")
             p.save(); p.translate(x_line - 30 if offset < 0 else x_line + 30, (start.y() + end.y())/2); p.rotate(-90)
-            p.drawText(QRectF(-1000, -150 if offset<0 else 20, 2000, 140), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset<0 else Qt.AlignmentFlag.AlignTop), text)
-            p.restore()
+            p.drawText(QRectF(-1000, -150 if offset<0 else 20, 2000, 140), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset<0 else Qt.AlignmentFlag.AlignTop), text); p.restore()
         else:
             y_line = start.y() + offset
-            p.drawLine(QPointF(start.x(), start.y()-10), QPointF(start.x(), y_line+10)) 
-            p.drawLine(QPointF(end.x(), start.y()-10), QPointF(end.x(), y_line+10))      
-            p.drawLine(QPointF(start.x(), y_line), QPointF(end.x(), y_line))
+            p.drawLine(QPointF(start.x(), start.y()-10), QPointF(start.x(), y_line+10)); p.drawLine(QPointF(end.x(), start.y()-10), QPointF(end.x(), y_line+10)); p.drawLine(QPointF(start.x(), y_line), QPointF(end.x(), y_line))
             self.draw_arrow(p, QPointF(start.x(), y_line), "left"); self.draw_arrow(p, QPointF(end.x(), y_line), "right")
             p.drawText(QRectF(start.x(), y_line - 150 if offset < 0 else y_line + 10, end.x()-start.x(), 140), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset < 0 else Qt.AlignmentFlag.AlignTop), text)
 
@@ -1018,70 +958,51 @@ class FrameApp(QMainWindow):
         elif direction == "down": a.append(tip+QPointF(-s/3,-s)); a.append(tip+QPointF(s/3,-s))
         p.setBrush(Qt.GlobalColor.black); p.drawPolygon(a)
 
-    def draw_row(self, p, y, label, vis, phys):
-        p.drawText(100, y, label); p.drawText(1000, y, f"Visible {vis}"); p.drawText(4000, y, "|"); p.drawText(4200, y, f"Physical {phys}")
-
     def export_pdf(self):
         if not self.last_calc: return
         fn, _ = QFileDialog.getSaveFileName(self, "Save PDF", "Mat_Blueprint.pdf", "PDF Files (*.pdf)")
         if not fn: return
         d = self.last_calc; u = d['unit']
         writer = QPdfWriter(fn); writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
-        painter = QPainter(); painter.begin(writer)
+        painter = QPainter(writer)
         
+        # Page 1: Blueprint
         font = painter.font(); font.setPointSize(14); font.setBold(True); painter.setFont(font)
-        painter.drawText(100, 150, f"MAT BLUEPRINT")
+        painter.drawText(100, 150, "MAT BLUEPRINT [TECHNICAL]")
         font.setPointSize(10); font.setBold(False); painter.setFont(font)
-        
         y = 300; h = 160
-        for line in [f"CUT SIZE: {UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}",
-                     f"APERTURE: {UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}",
-                     f"PRINT SIZE: {UnitUtils.format_dual(d['print_w'], u)} x {UnitUtils.format_dual(d['print_h'], u)}"]:
-            painter.drawText(100, int(y), line); y += h
+        for l in [f"CUT SIZE: {UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}",
+                  f"APERTURE: {UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}",
+                  f"PRINT SIZE: {UnitUtils.format_dual(d['print_w'], u)} x {UnitUtils.format_dual(d['print_h'], u)}"]:
+            painter.drawText(100, int(y), l); y += h
         
-        y += h*0.5; painter.drawText(100, int(y), "BORDERS:"); y += h
-        for label, k_vis, k_phys in [("TOP:", 'mat_top', 'phys_top'), ("BOTTOM:", 'mat_bottom', 'phys_bot'),
-                                     ("LEFT:", 'mat_left', 'phys_left'), ("RIGHT:", 'mat_right', 'phys_right')]:
-            self.draw_row(painter, int(y), label, UnitUtils.format_dual(d[k_vis], u), UnitUtils.format_dual(d[k_phys], u))
-            y += h
-
         avail_w, avail_h = writer.width(), writer.height() - y - 500
         scale = min(avail_w * 0.8 / d['cut_w'], avail_h * 0.8 / d['cut_h'])
-        dw, dh = d['cut_w']*scale, d['cut_h']*scale
-        ox, oy = (avail_w - dw)/2, y + (avail_h - dh)/2
+        ox, oy = (avail_w - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
-        aw, ah = d['img_w']*scale, d['img_h']*scale
+        painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
+        painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
+        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+d['img_w']*scale, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -200, False)
+        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+d['img_h']*scale), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -200, True)
+
+        # Page 2: Final Preview
+        writer.newPage()
+        font.setPointSize(14); font.setBold(True); painter.setFont(font)
+        painter.drawText(100, 150, "VISUAL PREVIEW")
         
-        painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, dw, dh))
-        painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, aw, ah))
-        
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+aw, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -200, False)
-        self.draw_dimension(painter, QPointF(ax, ay+ah), QPointF(ax+aw, ay+ah), f"Bottom: {UnitUtils.format_dual(d['phys_bot'], u)}", 200, False)
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+ah), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -200, True)
-        self.draw_dimension(painter, QPointF(ax+aw, ay), QPointF(ax+aw, ay+ah), f"Right: {UnitUtils.format_dual(d['phys_right'], u)}", 200, True)
-        
+        preview_pixmap = self.preview.pixmap()
+        if preview_pixmap:
+            pw, ph = writer.width() * 0.8, writer.height() * 0.6
+            scaled_p = preview_pixmap.scaled(int(pw), int(ph), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            px = (writer.width() - scaled_p.width()) / 2
+            py = (writer.height() - scaled_p.height()) / 2
+            painter.drawPixmap(int(px), int(py), scaled_p)
+
         painter.end()
-        QMessageBox.information(self, "Export", f"Blueprint saved to {fn}")
+        QMessageBox.information(self, "Export", f"Blueprint and Preview saved to {fn}")
 
 if __name__ == "__main__":
-    QImageReader.setAllocationLimit(0)
-    app = QApplication(sys.argv)
-    app.setStyle("Fusion")
-    palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
-    palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
-    palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
-    palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
-    palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
-    palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
-    palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
-    palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
-    palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-    palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
-    palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
-    app.setPalette(palette)
-    window = FrameApp()
-    window.showMaximized() 
-    sys.exit(app.exec())
+    QImageReader.setAllocationLimit(0); app = QApplication(sys.argv); app.setStyle("Fusion")
+    palette = QPalette(); palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
+    palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white); palette.setColor(QPalette.ColorRole.Base, QColor(25, 25, 25))
+    app.setPalette(palette); window = FrameApp(); window.showMaximized(); sys.exit(app.exec())
