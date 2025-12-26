@@ -541,13 +541,13 @@ class FrameApp(QMainWindow):
             x_line = start.x() + offset
             p.drawLine(QPointF(start.x()-10, start.y()), QPointF(x_line+10, start.y())); p.drawLine(QPointF(start.x()-10, end.y()), QPointF(x_line+10, end.y())); p.drawLine(QPointF(x_line, start.y()), QPointF(x_line, end.y()))
             self.draw_arrow(p, QPointF(x_line, start.y()), "up"); self.draw_arrow(p, QPointF(x_line, end.y()), "down")
-            p.save(); p.translate(x_line - 30 if offset < 0 else x_line + 30, (start.y() + end.y())/2); p.rotate(-90)
-            p.drawText(QRectF(-1000, -150 if offset<0 else 20, 2000, 140), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset<0 else Qt.AlignmentFlag.AlignTop), text); p.restore()
+            p.save(); p.translate(x_line - 50 if offset < 0 else x_line + 50, (start.y() + end.y())/2); p.rotate(-90)
+            p.drawText(QRectF(-1000, -300 if offset<0 else 20, 2000, 280), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset<0 else Qt.AlignmentFlag.AlignTop), text); p.restore()
         else:
             y_line = start.y() + offset
             p.drawLine(QPointF(start.x(), start.y()-10), QPointF(start.x(), y_line+10)); p.drawLine(QPointF(end.x(), start.y()-10), QPointF(end.x(), y_line+10)); p.drawLine(QPointF(start.x(), y_line), QPointF(end.x(), y_line))
             self.draw_arrow(p, QPointF(start.x(), y_line), "left"); self.draw_arrow(p, QPointF(end.x(), y_line), "right")
-            p.drawText(QRectF(start.x(), y_line - 150 if offset < 0 else y_line + 10, end.x()-start.x(), 140), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset < 0 else Qt.AlignmentFlag.AlignTop), text)
+            p.drawText(QRectF(start.x(), y_line - 300 if offset < 0 else y_line + 10, end.x()-start.x(), 280), Qt.AlignmentFlag.AlignHCenter | (Qt.AlignmentFlag.AlignBottom if offset < 0 else Qt.AlignmentFlag.AlignTop), text)
 
     def draw_arrow(self, p, tip, direction):
         s = 15; a = QPolygonF([tip])
@@ -575,14 +575,14 @@ class FrameApp(QMainWindow):
                   f"PRINT SIZE: {UnitUtils.format_dual(d['print_w'], u)} x {UnitUtils.format_dual(d['print_h'], u)}"]:
             painter.drawText(100, int(y), l); y += h
         
-        avail_w, avail_h = writer.width(), writer.height() - y - 1000
-        scale = min(avail_w * 0.75 / d['cut_w'], avail_h * 0.75 / d['cut_h'])
-        ox, oy = (writer.width() - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2 + 200
+        avail_w, avail_h = writer.width(), writer.height() - y - 2000
+        scale = min(avail_w * 0.6 / d['cut_w'], avail_h * 0.6 / d['cut_h'])
+        ox, oy = (writer.width() - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2 + 1000
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
         painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
         painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+d['img_w']*scale, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -300, False)
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+d['img_h']*scale), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -300, True)
+        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+d['img_w']*scale, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -500, False)
+        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+d['img_h']*scale), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -500, True)
 
         # Page 2: Final Preview
         writer.newPage()
