@@ -222,28 +222,48 @@ class TextureLibraryDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Texture Library")
-        self.resize(600, 400)
-        self.selected_texture = None
+        self.resize(800, 500)
         
-        layout = QVBoxLayout(self)
+        main_layout = QHBoxLayout(self)
+        
+        # Left: List
+        left_wid = QWidget(); left_lay = QVBoxLayout(left_wid)
         self.list_widget = QListWidget()
         self.list_widget.setViewMode(QListWidget.ViewMode.IconMode)
-        self.list_widget.setIconSize(QSize(100, 100))
-        self.list_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.list_widget.setMovement(QListWidget.Movement.Static)
+        self.list_widget.setIconSize(QSize(80, 80))
         self.list_widget.setSpacing(10)
-        layout.addWidget(self.list_widget)
+        self.list_widget.itemSelectionChanged.connect(self.update_preview)
+        left_lay.addWidget(QLabel("<b>Textures Found:</b>"))
+        left_lay.addWidget(self.list_widget)
+        
+        # Right: Preview
+        right_wid = QWidget(); right_lay = QVBoxLayout(right_wid); right_wid.setFixedWidth(250)
+        self.lbl_zoom = QLabel("Select to preview")
+        self.lbl_zoom.setFixedSize(230, 230)
+        self.lbl_zoom.setStyleSheet("border: 1px solid #555; background: #202020;")
+        self.lbl_zoom.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        right_lay.addWidget(self.lbl_zoom)
+        
+        self.btn_del = QPushButton("Delete Texture")
+        self.btn_del.setStyleSheet("background-color: #dc3545; color: white;")
+        self.btn_del.clicked.connect(self.delete_texture)
+        right_lay.addWidget(self.btn_del)
+        right_lay.addStretch()
         
         btn_layout = QHBoxLayout()
-        btn_select = QPushButton("Select"); btn_select.clicked.connect(self.accept)
-        btn_cancel = QPushButton("Cancel"); btn_cancel.clicked.connect(self.reject)
-        btn_layout.addStretch()
+        btn_select = QPushButton("Use Selected"); btn_select.clicked.connect(self.accept)
+        btn_select.setStyleSheet("font-weight: bold; background: #0078d7; color: white;")
+        btn_cancel = QPushButton("Close"); btn_cancel.clicked.connect(self.reject)
         btn_layout.addWidget(btn_cancel); btn_layout.addWidget(btn_select)
-        layout.addLayout(btn_layout)
+        right_lay.addLayout(btn_layout)
+        
+        main_layout.addWidget(left_wid, 1)
+        main_layout.addWidget(right_wid)
         
         self.load_library()
         
     def load_library(self):
+        self.list_widget.clear()
         if not os.path.exists("textures"): return
         for fn in os.listdir("textures"):
             if fn.lower().endswith(".png"):
@@ -254,8 +274,74 @@ class TextureLibraryDialog(QDialog):
                 item.setData(Qt.ItemDataRole.UserRole, path)
                 self.list_widget.addItem(item)
                 
-    def get_selected_texture(self):
+    def update_preview(self):
         item = self.list_widget.currentItem()
         if item:
-            return QPixmap(item.data(Qt.ItemDataRole.UserRole))
+            pix = QPixmap(item.data(Qt.ItemDataRole.UserRole))
+            self.lbl_zoom.setPixmap(pix.scaled(200, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            self.lbl_zoom.clear(); self.lbl_zoom.setText("Select to preview")
+
+    def delete_texture(self):
+        item = self.list_widget.currentItem()
+        if not item: return
+        path = item.data(Qt.ItemDataRole.UserRole)
+        if QMessageBox.question(self, "Delete", f"Delete '{item.text()}'?", 
+                                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+            os.remove(path)
+            self.load_library()
+            self.update_preview()
+
+    def get_selected_texture(self):
+        item = self.list_widget.currentItem()
+        if item: return QPixmap(item.data(Qt.ItemDataRole.UserRole))
         return None
+
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QWidget
+
+class PresetManagerDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Manage Frame Presets")
+        self.resize(500, 400)
+        
+        layout = QVBoxLayout(self)
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["Name", "Width", "Height", "Rabbet"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        layout.addWidget(self.table)
+        
+        btn_lay = QHBoxLayout()
+        btn_del = QPushButton("Delete Selected"); btn_del.clicked.connect(self.delete_preset)
+        btn_del.setStyleSheet("background-color: #dc3545; color: white;")
+        btn_close = QPushButton("Close"); btn_close.clicked.connect(self.accept)
+        btn_lay.addWidget(btn_del); btn_lay.addStretch(); btn_lay.addWidget(btn_close)
+        layout.addLayout(btn_lay)
+        
+        self.load_presets()
+        
+    def load_presets(self):
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("MattG", "FrameTamer")
+        presets = settings.value("presets", {})
+        self.table.setRowCount(0)
+        for name, vals in presets.items():
+            r = self.table.rowCount()
+            self.table.insertRow(r)
+            self.table.setItem(r, 0, QTableWidgetItem(name))
+            self.table.setItem(r, 1, QTableWidgetItem(str(vals.get('w'))))
+            self.table.setItem(r, 2, QTableWidgetItem(str(vals.get('h'))))
+            self.table.setItem(r, 3, QTableWidgetItem(str(vals.get('r'))))
+            
+    def delete_preset(self):
+        row = self.table.currentRow()
+        if row < 0: return
+        name = self.table.item(row, 0).text()
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("MattG", "FrameTamer")
+        presets = settings.value("presets", {})
+        if name in presets:
+            del presets[name]
+            settings.setValue("presets", presets)
+            self.load_presets()

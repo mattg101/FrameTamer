@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QFileDialog, QColorDialog,
                              QGroupBox, QGridLayout, QDoubleSpinBox, QComboBox, QCheckBox, 
                              QSizePolicy, QFormLayout, QButtonGroup, QStackedWidget, 
-                             QScrollArea, QFrame, QMessageBox, QRadioButton)
+                             QScrollArea, QFrame, QMessageBox, QRadioButton, QInputDialog)
 from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings
 from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, 
                          QPolygonF, QFont, QImageReader, QPageSize)
@@ -15,7 +15,7 @@ from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter,
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
 from .utils import UnitUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel
-from .dialogs import TextureSamplerDialog, TextureLibraryDialog
+from .dialogs import TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog
 
 class FrameApp(QMainWindow):
     def __init__(self):
@@ -31,6 +31,7 @@ class FrameApp(QMainWindow):
         self.last_calc = {}
         self.updating_ui = False
         self.unit_inputs = [] 
+        self.defaults_mode = False
         
         self.setup_ui()
         self.load_settings()
@@ -116,9 +117,18 @@ class FrameApp(QMainWindow):
         self.gb_frame = QGroupBox("Frame Aperture (Visible Opening)"); gl_f = QGridLayout()
         self.spin_iw = self._add_spin(gl_f, 0, "Aperture Width:", 16.0)
         self.spin_ih = self._add_spin(gl_f, 1, "Aperture Height:", 20.0)
+        
+        h_preset = QHBoxLayout()
+        self.combo_presets = QComboBox(); self.combo_presets.addItem("Select Preset..."); self.combo_presets.currentIndexChanged.connect(self.on_preset_selected)
+        btn_save_preset = QPushButton("Save"); btn_save_preset.setFixedWidth(50); btn_save_preset.clicked.connect(self.save_preset)
+        btn_manage_presets = QPushButton("..."); btn_manage_presets.setFixedWidth(30); btn_manage_presets.clicked.connect(self.manage_presets)
+        h_preset.addWidget(self.combo_presets); h_preset.addWidget(btn_save_preset); h_preset.addWidget(btn_manage_presets)
+        gl_f.addLayout(h_preset, 2, 0, 1, 2)
+        
         btn_swap = QPushButton("Swap W/H"); btn_swap.clicked.connect(self.swap_frame_dims)
-        gl_f.addWidget(btn_swap, 2, 0, 1, 2)
+        gl_f.addWidget(btn_swap, 3, 0, 1, 2)
         self.gb_frame.setLayout(gl_f); self.c_layout.addWidget(self.gb_frame)
+        self.refresh_preset_list()
 
         self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout()
         self.rb_driver_w = QRadioButton("W"); self.rb_driver_w.setChecked(True)
@@ -189,7 +199,21 @@ class FrameApp(QMainWindow):
         self.lbl_stats.setWordWrap(True); self.c_layout.addWidget(self.lbl_stats)
         
         btn_pdf = QPushButton("Export Mat Blueprint (PDF)"); btn_pdf.setStyleSheet("background-color: #d83b01; font-weight: bold; margin-top: 20px; padding: 10px; color: white;")
-        btn_pdf.clicked.connect(self.export_pdf); self.c_layout.addWidget(btn_pdf); self.c_layout.addStretch()
+        btn_pdf.clicked.connect(self.export_pdf); self.c_layout.addWidget(btn_pdf)
+        
+        self.btn_defaults_mode = QPushButton("Editor: Defaults Mode [OFF]")
+        self.btn_defaults_mode.setCheckable(True)
+        self.btn_defaults_mode.clicked.connect(self.toggle_defaults_mode)
+        self.btn_defaults_mode.setStyleSheet("margin-top: 10px; padding: 5px;")
+        self.c_layout.addWidget(self.btn_defaults_mode)
+
+        self.btn_save_defaults = QPushButton("Save Current as Defaults")
+        self.btn_save_defaults.clicked.connect(self.save_as_defaults)
+        self.btn_save_defaults.setStyleSheet("background-color: #ffc107; color: black; font-weight: bold; padding: 5px;")
+        self.btn_save_defaults.hide()
+        self.c_layout.addWidget(self.btn_save_defaults)
+        
+        self.c_layout.addStretch()
 
     def _create_spin(self, val):
         s = QDoubleSpinBox(); s.setRange(0, 99999); s.setDecimals(3); s.setValue(val); s.valueChanged.connect(self.recalc)
@@ -274,6 +298,57 @@ class FrameApp(QMainWindow):
         self.gb_art_specs.setVisible(not fixed); self.gb_mat_dims.setVisible(not fixed)
         self.stack_editors.setCurrentWidget(self.editor_cropper if fixed else self.editor_mat)
         self.recalc()
+
+    def toggle_defaults_mode(self):
+        self.defaults_mode = self.btn_defaults_mode.isChecked()
+        self.btn_defaults_mode.setText(f"Editor: Defaults Mode [{'ON' if self.defaults_mode else 'OFF'}]")
+        self.btn_save_defaults.setVisible(self.defaults_mode)
+        
+        # Define fields that are "defaults"
+        default_fields = [self.spin_iw, self.spin_ih, self.spin_face, self.spin_rabbet, self.spin_print_border]
+        highlight = "border: 2px solid #ffc107; background: #3a3a20;" if self.defaults_mode else ""
+        for f in default_fields: f.setStyleSheet(highlight)
+
+    def save_as_defaults(self):
+        settings = QSettings("MattG", "FrameTamer")
+        settings.setValue("aperture_w", self.spin_iw.value())
+        settings.setValue("aperture_h", self.spin_ih.value())
+        settings.setValue("face_w", self.spin_face.value())
+        settings.setValue("rabbet_w", self.spin_rabbet.value())
+        settings.setValue("print_border", self.spin_print_border.value())
+        settings.setValue("mat_color", self.mat_color.name())
+        settings.setValue("frame_color", self.frame_color.name())
+        settings.setValue("unit", self.unit)
+        QMessageBox.information(self, "Defaults Saved", "Current values set as application defaults.")
+
+    def refresh_preset_list(self):
+        self.updating_ui = True
+        self.combo_presets.clear(); self.combo_presets.addItem("Select Preset...")
+        settings = QSettings("MattG", "FrameTamer"); presets = settings.value("presets", {})
+        for name in sorted(presets.keys()): self.combo_presets.addItem(name)
+        self.updating_ui = False
+
+    def on_preset_selected(self, index):
+        if self.updating_ui or index <= 0: return
+        name = self.combo_presets.currentText()
+        settings = QSettings("MattG", "FrameTamer"); presets = settings.value("presets", {})
+        if name in presets:
+            v = presets[name]; self.updating_ui = True
+            self.spin_iw.setValue(float(v.get('w', 16)))
+            self.spin_ih.setValue(float(v.get('h', 20)))
+            self.spin_rabbet.setValue(float(v.get('r', 0.25)))
+            self.updating_ui = False; self.recalc()
+
+    def save_preset(self):
+        name, ok = QInputDialog.getText(self, "Save Preset", "Preset Name:")
+        if ok and name:
+            settings = QSettings("MattG", "FrameTamer")
+            presets = settings.value("presets", {})
+            presets[name] = {'w': self.spin_iw.value(), 'h': self.spin_ih.value(), 'r': self.spin_rabbet.value()}
+            settings.setValue("presets", presets); self.refresh_preset_list()
+
+    def manage_presets(self):
+        if PresetManagerDialog(self).exec(): self.refresh_preset_list()
 
     def toggle_no_mat(self):
         is_no = self.chk_no_mat.isChecked()
