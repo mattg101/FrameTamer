@@ -176,18 +176,48 @@ class FrameApp(QMainWindow):
 
     def load_rick_roll(self):
         fn = "rick_default.png"
-        if os.path.exists(fn) and os.path.getsize(fn) == 0: os.remove(fn)
+        print(f"Loading/Downloading default image to: {fn}")
+        
+        # If it's zero size, it's definitely bad
+        if os.path.exists(fn) and os.path.getsize(fn) == 0: 
+            os.remove(fn)
+            
         if not os.path.exists(fn):
             try:
+                print("Attempting to download Rick Roll thumbnail...")
                 ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
                 req = Request(RICK_ROLL_URL, headers={'User-Agent': 'Mozilla/5.0'})
-                with urlopen(req, context=ctx) as u, open(fn, 'wb') as f: f.write(u.read())
+                with urlopen(req, context=ctx) as u, open(fn, 'wb') as f: 
+                    f.write(u.read())
+                print("Download successful.")
             except Exception as e:
+                print(f"Download failed: {e}. Generating ASCII fallback...")
                 pm = QPixmap(800, 600); pm.fill(QColor(20, 20, 20)); p = QPainter(pm)
                 font = QFont("Consolas", 14); font.setStyleHint(QFont.StyleHint.Monospace)
-                p.setFont(font); p.setPen(QColor(0, 255, 0)); p.drawText(QRectF(0,0,800,600), Qt.AlignmentFlag.AlignCenter, RICK_ASCII); p.end(); pm.save(fn)
+                p.setFont(font); p.setPen(QColor(0, 255, 0))
+                p.drawText(QRectF(0,0,800,600), Qt.AlignmentFlag.AlignCenter, RICK_ASCII)
+                p.end()
+                pm.save(fn)
+                print("ASCII fallback generated and saved.")
+
         if os.path.exists(fn):
-            self.pixmap_full = QPixmap(fn); self.editor_cropper.set_image(self.pixmap_full); self.editor_mat.set_image(self.pixmap_full); self.recalc_aspect()
+            pm = QPixmap(fn)
+            if pm.isNull():
+                print(f"Corrupted image found at {fn}. Deleting and using direct ASCII render.")
+                os.remove(fn)
+                # Render directly to self.pixmap_full instead of saving to file if download failed badly
+                self.pixmap_full = QPixmap(800, 600); self.pixmap_full.fill(QColor(20, 20, 20))
+                p = QPainter(self.pixmap_full)
+                font = QFont("Consolas", 14); font.setStyleHint(QFont.StyleHint.Monospace)
+                p.setFont(font); p.setPen(QColor(0, 255, 0))
+                p.drawText(QRectF(0,0,800,600), Qt.AlignmentFlag.AlignCenter, RICK_ASCII)
+                p.end()
+            else:
+                self.pixmap_full = pm
+
+            self.editor_cropper.set_image(self.pixmap_full)
+            self.editor_mat.set_image(self.pixmap_full)
+            self.recalc_aspect()
 
     # --- LOGIC ---
     def update_ui_visibility(self):
