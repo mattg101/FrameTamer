@@ -15,7 +15,7 @@ from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter,
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
 from .utils import UnitUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel
-from .dialogs import TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog
+from .dialogs import TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, GooglePhotosDialog
 
 class FrameApp(QMainWindow):
     def __init__(self):
@@ -127,7 +127,9 @@ class FrameApp(QMainWindow):
         h_top = QHBoxLayout()
         btn_import = QPushButton("Import Photo"); btn_import.clicked.connect(self.import_image)
         btn_import.setStyleSheet("background-color: #0078d7; font-weight: bold; padding: 8px; color: white;")
-        h_top.addWidget(btn_import)
+        btn_google = QPushButton("Google Photos"); btn_google.clicked.connect(self.load_from_google_photos)
+        btn_google.setStyleSheet("background-color: #4285F4; color: white; font-weight: bold; padding: 8px;")
+        h_top.addWidget(btn_import); h_top.addWidget(btn_google)
         
         v_units = QVBoxLayout()
         v_units = QVBoxLayout()
@@ -423,9 +425,23 @@ class FrameApp(QMainWindow):
     def import_image(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
         if path: 
-            self.pixmap_full = QPixmap(path)
-            self.editor_cropper.set_image(self.pixmap_full); self.editor_mat.set_image(self.pixmap_full)
-            self.current_crop = QRectF(0,0,1,1); self.recalc_aspect()
+            pm = QPixmap(path)
+            if not pm.isNull(): self.set_image(pm)
+            else: QMessageBox.warning(self, "Error", "Failed to load image.")
+
+    def load_from_google_photos(self):
+        dlg = GooglePhotosDialog(self)
+        if dlg.exec():
+            pix = dlg.get_selected_image()
+            if pix and not pix.isNull():
+                self.set_image(pix)
+            elif pix:
+                QMessageBox.warning(self, "Error", "Failed to load photo from Google.")
+
+    def set_image(self, pixmap):
+        self.pixmap_full = pixmap
+        self.editor_cropper.set_image(self.pixmap_full); self.editor_mat.set_image(self.pixmap_full)
+        self.current_crop = QRectF(0,0,1,1); self.recalc_aspect()
 
     def load_frame_texture(self):
         dlg = TextureSamplerDialog(self)

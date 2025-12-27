@@ -1,9 +1,12 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFileDialog, QSlider, QSizePolicy,
                              QInputDialog, QListWidget, QListWidgetItem, QAbstractItemView)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent, QSize
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon
+from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon, QImage
 import os
+import threading
+import requests
+from .google_photos import GooglePhotosManager
 
 class TextureSamplerDialog(QDialog):
     def __init__(self, parent=None):
@@ -345,3 +348,115 @@ class PresetManagerDialog(QDialog):
             del presets[name]
             settings.setValue("presets", presets)
             self.load_presets()
+
+class PhotoLoader(QThread):
+    finished = pyqtSignal(list, str) # list of (id, pixmap, base_url), next_page_token
+    error = pyqtSignal(str)
+
+    def __init__(self, manager, page_token=None):
+        super().__init__()
+        self.manager = manager
+        self.page_token = page_token
+
+    def run(self):
+        try:
+            data = self.manager.list_media_items(self.page_token)
+            items = data.get('mediaItems', [])
+            next_token = data.get('nextPageToken', "")
+            
+            results = []
+            for item in items:
+                # Fetch small thumbnail for the list
+                thumb_data = self.manager.get_image_data(item['baseUrl'], width=150, height=150)
+                img = QImage.fromData(thumb_data)
+                pix = QPixmap.fromImage(img)
+                results.append((item['id'], pix, item['baseUrl']))
+            
+            self.finished.emit(results, next_token)
+        except Exception as e:
+            self.error.emit(str(e))
+
+class GooglePhotosDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Browse Google Photos")
+        self.resize(900, 700)
+        self.manager = GooglePhotosManager()
+        self.selected_base_url = None
+        self.next_page_token = None
+        self.loading = False
+        
+        layout = QVBoxLayout(self)
+        
+        # Grid list
+        self.list_widget = QListWidget()
+        self.list_widget.setViewMode(QListWidget.ViewMode.IconMode)
+        self.list_widget.setIconSize(QSize(150, 150))
+        self.list_widget.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.list_widget.setSpacing(10)
+        self.list_widget.setWordWrap(True)
+        layout.addWidget(self.list_widget)
+        
+        # Bottom controls
+        self.btn_load_more = QPushButton("Load More")
+        self.btn_load_more.clicked.connect(self.load_photos)
+        self.btn_load_more.hide()
+        
+        btn_layout = QHBoxLayout()
+        self.lbl_status = QLabel("Ready")
+        btn_layout.addWidget(self.lbl_status)
+        btn_layout.addStretch()
+        btn_layout.addWidget(self.btn_load_more)
+        
+        btn_select = QPushButton("Select Photo"); btn_select.clicked.connect(self.accept)
+        btn_select.setStyleSheet("background: #0078d7; color: white; font-weight: bold; padding: 5px 15px;")
+        btn_cancel = QPushButton("Cancel"); btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel); btn_layout.addWidget(btn_select)
+        
+        layout.addLayout(btn_layout)
+        
+        # Start initial load
+        self.load_photos()
+
+    def load_photos(self):
+        if self.loading: return
+        self.loading = True
+        self.lbl_status.setText("Connecting...")
+        self.btn_load_more.setEnabled(False)
+        
+        self.loader = PhotoLoader(self.manager, self.next_page_token)
+        self.loader.finished.connect(self.on_photos_loaded)
+        self.loader.error.connect(self.on_error)
+        self.loader.start()
+
+    def on_photos_loaded(self, results, next_token):
+        self.loading = False
+        self.next_page_token = next_token
+        
+        for pid, pix, base_url in results:
+            item = QListWidgetItem()
+            item.setIcon(QIcon(pix))
+            item.setData(Qt.ItemDataRole.UserRole, base_url)
+            self.list_widget.addItem(item)
+            
+        self.lbl_status.setText(f"Loaded {self.list_widget.count()} photos")
+        self.btn_load_more.setEnabled(True)
+        self.btn_load_more.setVisible(bool(next_token))
+
+    def on_error(self, err_msg):
+        self.loading = False
+        self.lbl_status.setText(f"Error: {err_msg}")
+        QMessageBox.critical(self, "Photos Error", f"Failed to load photos:\n{err_msg}")
+
+    def get_selected_image(self):
+        item = self.list_widget.currentItem()
+        if item:
+            base_url = item.data(Qt.ItemDataRole.UserRole)
+            # Fetch higher res for the actual app
+            try:
+                data = self.manager.get_image_data(base_url, width=2048, height=2048)
+                img = QImage.fromData(data)
+                return QPixmap.fromImage(img)
+            except Exception as e:
+                QMessageBox.warning(self, "Download Error", f"Could not download full image: {e}")
+        return None
