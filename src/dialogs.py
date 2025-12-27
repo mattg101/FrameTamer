@@ -83,6 +83,7 @@ class TextureSamplerDialog(QDialog):
         
         # Load default image if available
         self.load_default_texture()
+        self.fully_initialized = True
 
     def load_default_texture(self):
         # Look for texture_default.jpg in the app root
@@ -129,8 +130,9 @@ class TextureSamplerDialog(QDialog):
         self.pixmap_rotated = self.pixmap_orig.transformed(t, Qt.TransformationMode.SmoothTransformation)
         
         # Show grid for 500ms
-        self.grid_visible = True
-        self.grid_timer.start(500)
+        if getattr(self, 'fully_initialized', False):
+            self.grid_visible = True
+            self.grid_timer.start(500)
         
         # FIX: Do NOT reset view here, just update display to keep zoom/pan
         self.update_display()
@@ -170,16 +172,42 @@ class TextureSamplerDialog(QDialog):
         p.drawPixmap(img_rect.toRect(), self.pixmap_rotated)
         
         # Draw Grid Overlay (Helpful for straightening)
-        # 10x10 grid, only visible during/after rotation
+        # 100px fixed-spacing "Window-Frame" grid
         if self.grid_visible:
-            p.setPen(QPen(QColor(255, 255, 255, 60), 1, Qt.PenStyle.DashLine))
-            for i in range(1, 10):
-                # Vertical lines
-                vx = img_rect.x() + (img_rect.width() * i / 10.0)
-                p.drawLine(QPointF(vx, img_rect.top()), QPointF(vx, img_rect.bottom()))
-                # Horizontal lines
-                vy = img_rect.y() + (img_rect.height() * i / 10.0)
-                p.drawLine(QPointF(img_rect.left(), vy), QPointF(img_rect.right(), vy))
+            # High-visibility White, 100/255 opacity
+            grid_color = QColor(255, 255, 255, 100)
+            
+            # Secondary Lines (Dashed)
+            p.setPen(QPen(grid_color, 1, Qt.PenStyle.DashLine))
+            spacing = 100
+            
+            # Draw from center outwards to ensure symmetry
+            cx, cy = w / 2, h / 2
+            
+            # Vertical lines
+            x = cx + spacing
+            while x < w:
+                p.drawLine(QPointF(x, 0), QPointF(x, h))
+                x += spacing
+            x = cx - spacing
+            while x > 0:
+                p.drawLine(QPointF(x, 0), QPointF(x, h))
+                x -= spacing
+                
+            # Horizontal lines
+            y = cy + spacing
+            while y < h:
+                p.drawLine(QPointF(0, y), QPointF(w, y))
+                y += spacing
+            y = cy - spacing
+            while y > 0:
+                p.drawLine(QPointF(0, y), QPointF(w, y))
+                y -= spacing
+                
+            # Center Crosshair (Solid)
+            p.setPen(QPen(grid_color, 1, Qt.PenStyle.SolidLine))
+            p.drawLine(QPointF(cx, 0), QPointF(cx, h))
+            p.drawLine(QPointF(0, cy), QPointF(w, cy))
         
         sx = img_rect.x() + self.selection_norm.x() * img_rect.width()
         sy = img_rect.y() + self.selection_norm.y() * img_rect.height()
