@@ -30,6 +30,7 @@ class TextureSamplerDialog(QDialog):
         self.panning_selection = False
         self.last_mouse_pos = QPointF()
         self.selection_start_norm = QPointF()
+        self.drag_mode = None # None, 'top_left', 'top_right', 'bottom_left', 'bottom_right', 'new'
 
         # Layout
         layout = QVBoxLayout(self)
@@ -73,6 +74,20 @@ class TextureSamplerDialog(QDialog):
         h_ctrl.addWidget(btn_save)
         
         layout.addLayout(h_ctrl)
+        
+        # Load default image if available
+        self.load_default_texture()
+
+    def load_default_texture(self):
+        # Look for texture_default.jpg in the app root
+        # Since we are in src/dialogs.py, we go up one level
+        default_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "texture_default.jpg")
+        if os.path.exists(default_path):
+            self.pixmap_orig = QPixmap(default_path)
+            self.slider_rot.setValue(0)
+            self.reset_view()
+            self.on_rotation_changed()
+            print(f"Loaded default texture: {default_path}")
 
     def save_to_library(self):
         tex = self.get_texture()
@@ -183,13 +198,35 @@ class TextureSamplerDialog(QDialog):
                         self.panning = True
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 elif event.button() == Qt.MouseButton.LeftButton:
-                    self.dragging_selection = True
                     img_rect, scale = self.get_transforms()
                     if img_rect.width() > 0 and img_rect.height() > 0:
-                        nx = (event.pos().x() - img_rect.x()) / img_rect.width()
-                        ny = (event.pos().y() - img_rect.y()) / img_rect.height()
-                        self.selection_start_norm = QPointF(nx, ny)
-                        self.selection_norm = QRectF(nx, ny, 0, 0)
+                        # Get handle positions in screen coords
+                        sx = img_rect.x() + self.selection_norm.x() * img_rect.width()
+                        sy = img_rect.y() + self.selection_norm.y() * img_rect.height()
+                        sw = self.selection_norm.width() * img_rect.width()
+                        sh = self.selection_norm.height() * img_rect.height()
+                        
+                        handles = {
+                            'top_left': QPointF(sx, sy),
+                            'top_right': QPointF(sx + sw, sy),
+                            'bottom_left': QPointF(sx, sy + sh),
+                            'bottom_right': QPointF(sx + sw, sy + sh)
+                        }
+                        
+                        # Hit test
+                        self.drag_mode = 'new'
+                        for mode, pt in handles.items():
+                            if (QPointF(event.pos()) - pt).manhattanLength() < 25:
+                                self.drag_mode = mode
+                                break
+                        
+                        if self.drag_mode == 'new':
+                            nx = (event.pos().x() - img_rect.x()) / img_rect.width()
+                            ny = (event.pos().y() - img_rect.y()) / img_rect.height()
+                            self.selection_start_norm = QPointF(nx, ny)
+                            self.selection_norm = QRectF(nx, ny, 0, 0)
+                        
+                        self.dragging_selection = True
                         self.update_display()
                 return True
             
@@ -213,21 +250,53 @@ class TextureSamplerDialog(QDialog):
                         curr_x = (event.pos().x() - img_rect.x()) / img_rect.width()
                         curr_y = (event.pos().y() - img_rect.y()) / img_rect.height()
                         
-                        w = abs(curr_x - self.selection_start_norm.x())
-                        h = abs(curr_y - self.selection_start_norm.y())
-                        
-                        # Constraint: 2:1 Minimum Aspect Ratio
-                        # If horizontal (w > h), ensure w >= 2*h
-                        # If vertical (h > w), ensure h >= 2*w
-                        if w > h:
-                            if w < 2 * h: w = 2 * h
-                        elif h > w:
-                            if h < 2 * w: h = 2 * w
+                        if self.drag_mode == 'new':
+                            x1 = self.selection_start_norm.x()
+                            y1 = self.selection_start_norm.y()
+                            w = abs(curr_x - x1)
+                            h = abs(curr_y - y1)
                             
-                        x1 = self.selection_start_norm.x() if curr_x > self.selection_start_norm.x() else self.selection_start_norm.x() - w
-                        y1 = self.selection_start_norm.y() if curr_y > self.selection_start_norm.y() else self.selection_start_norm.y() - h
-                        
-                        self.selection_norm = QRectF(x1, y1, w, h)
+                            # Aspect Ratio Constraint
+                            if w > h:
+                                if w < 2 * h: w = 2 * h
+                            elif h > w:
+                                if h < 2 * w: h = 2 * w
+                            
+                            rx = x1 if curr_x > x1 else x1 - w
+                            ry = y1 if curr_y > y1 else y1 - h
+                            self.selection_norm = QRectF(rx, ry, w, h)
+                        else:
+                            # Corner Dragging - Pin the opposite corner
+                            r = QRectF(self.selection_norm)
+                            if self.drag_mode == 'top_left':
+                                x1, y1, x2, y2 = curr_x, curr_y, r.right(), r.bottom()
+                            elif self.drag_mode == 'top_right':
+                                x1, y1, x2, y2 = r.left(), curr_y, curr_x, r.bottom()
+                            elif self.drag_mode == 'bottom_left':
+                                x1, y1, x2, y2 = curr_x, r.top(), r.right(), curr_y
+                            elif self.drag_mode == 'bottom_right':
+                                x1, y1, x2, y2 = r.left(), r.top(), curr_x, curr_y
+                            
+                            # Constrain Aspect Ratio (2:1 minimum)
+                            rw, rh = abs(x2 - x1), abs(y2 - y1)
+                            if rw > rh:
+                                if rw < 2 * rh: rw = 2 * rh
+                            elif rh > rw:
+                                if rh < 2 * rw: rh = 2 * rw
+                            
+                            # Apply width/height adjustments based on which corner is moving
+                            # To keep the opposite corner pinned, we recalculate x1/y1 or x2/y2
+                            if self.drag_mode == 'top_left':
+                                x1, y1 = x2 - (rw if x1 < x2 else -rw), y2 - (rh if y1 < y2 else -rh)
+                            elif self.drag_mode == 'top_right':
+                                x2, y1 = x1 + (rw if x2 > x1 else -rw), y2 - (rh if y1 < y2 else -rh)
+                            elif self.drag_mode == 'bottom_left':
+                                x1, y2 = x2 - (rw if x1 < x2 else -rw), y1 + (rh if y2 > y1 else -rh)
+                            elif self.drag_mode == 'bottom_right':
+                                x2, y2 = x1 + (rw if x2 > x1 else -rw), y1 + (rh if y2 > y1 else -rh)
+                                
+                            self.selection_norm = QRectF(x1, y1, x2-x1, y2-y1).normalized()
+                            
                         self.update_display()
                 return True
             
