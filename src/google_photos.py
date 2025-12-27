@@ -11,8 +11,16 @@ class GooglePhotosManager:
     def __init__(self):
         self.creds = None
         self.service = None
-        self.token_path = 'token.pickle'
-        self.creds_path = 'credentials.json'
+        # Use system Local AppData for secure storage
+        self.app_data_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'FrameTamer')
+        if not os.path.exists(self.app_data_dir):
+            os.makedirs(self.app_data_dir)
+            
+        self.token_path = os.path.join(self.app_data_dir, 'token.pickle')
+        # We also check for credentials.json in the app data dir or project root
+        self.creds_path = os.path.join(self.app_data_dir, 'credentials.json')
+        if not os.path.exists(self.creds_path):
+            self.creds_path = 'credentials.json' # Fallback to local file for dev
 
     def authenticate(self):
         """Authenticates the user and returns the credentials."""
