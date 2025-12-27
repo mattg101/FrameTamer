@@ -154,6 +154,17 @@ class TextureSamplerDialog(QDialog):
         img_rect, scale = self.get_transforms()
         p.drawPixmap(img_rect.toRect(), self.pixmap_rotated)
         
+        # Draw Grid Overlay (Helpful for straightening)
+        # 5x5 grid
+        p.setPen(QPen(QColor(255, 255, 255, 60), 1, Qt.PenStyle.DashLine))
+        for i in range(1, 5):
+            # Vertical lines
+            vx = img_rect.x() + (img_rect.width() * i / 5.0)
+            p.drawLine(QPointF(vx, img_rect.top()), QPointF(vx, img_rect.bottom()))
+            # Horizontal lines
+            vy = img_rect.y() + (img_rect.height() * i / 5.0)
+            p.drawLine(QPointF(img_rect.left(), vy), QPointF(img_rect.right(), vy))
+        
         sx = img_rect.x() + self.selection_norm.x() * img_rect.width()
         sy = img_rect.y() + self.selection_norm.y() * img_rect.height()
         sw = self.selection_norm.width() * img_rect.width()
@@ -315,7 +326,15 @@ class TextureSamplerDialog(QDialog):
         r = QRectF(self.selection_norm.x()*w, self.selection_norm.y()*h, 
                    self.selection_norm.width()*w, self.selection_norm.height()*h).toRect()
         if r.width() < 1 or r.height() < 1: return None
-        return self.pixmap_rotated.copy(r)
+        
+        crop = self.pixmap_rotated.copy(r)
+        
+        # If vertical member (height > width), rotate 90 deg for tiling
+        if crop.height() > crop.width():
+            t = QTransform().rotate(90)
+            crop = crop.transformed(t, Qt.TransformationMode.SmoothTransformation)
+            
+        return crop
     
     def resizeEvent(self, event): self.update_display(); super().resizeEvent(event)
 
