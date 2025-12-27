@@ -27,6 +27,7 @@ class TextureSamplerDialog(QDialog):
         # Interaction State
         self.dragging_selection = False
         self.panning = False
+        self.panning_selection = False
         self.last_mouse_pos = QPointF()
         self.selection_start_norm = QPointF()
 
@@ -145,8 +146,13 @@ class TextureSamplerDialog(QDialog):
         
         sel_screen = QRectF(sx, sy, sw, sh)
         
-        p.setPen(QPen(QColor(0, 255, 0), 2))
-        p.setBrush(QColor(0, 255, 0, 40))
+        # Color based on Orientation (Width vs Height)
+        sel_color = QColor(0, 255, 0) # Lime Green (Horizontal)
+        if sel_screen.height() > sel_screen.width():
+            sel_color = QColor(0, 191, 255) # Deep Sky Blue (Vertical)
+            
+        p.setPen(QPen(sel_color, 2))
+        p.setBrush(QColor(sel_color.red(), sel_color.green(), sel_color.blue(), 40))
         p.drawRect(sel_screen)
         
         p.setBrush(QColor(255, 255, 255))
@@ -171,7 +177,10 @@ class TextureSamplerDialog(QDialog):
             elif event.type() == QEvent.Type.MouseButtonPress:
                 self.last_mouse_pos = event.pos()
                 if event.button() == Qt.MouseButton.RightButton:
-                    self.panning = True
+                    if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                        self.panning_selection = True
+                    else:
+                        self.panning = True
                     self.setCursor(Qt.CursorShape.ClosedHandCursor)
                 elif event.button() == Qt.MouseButton.LeftButton:
                     self.dragging_selection = True
@@ -185,9 +194,17 @@ class TextureSamplerDialog(QDialog):
                 return True
             
             elif event.type() == QEvent.Type.MouseMove:
-                if self.panning:
+                if self.panning or self.panning_selection:
                     delta = event.pos() - self.last_mouse_pos
-                    self.pan += QPointF(delta)
+                    img_rect, scale = self.get_transforms()
+                    
+                    if self.panning:
+                        self.pan += QPointF(delta)
+                    elif self.panning_selection and img_rect.width() > 0:
+                        dx_norm = delta.x() / img_rect.width()
+                        dy_norm = delta.y() / img_rect.height()
+                        self.selection_norm.translate(dx_norm, dy_norm)
+                        
                     self.last_mouse_pos = event.pos()
                     self.update_display()
                 elif self.dragging_selection:
@@ -195,16 +212,28 @@ class TextureSamplerDialog(QDialog):
                     if img_rect.width() > 0:
                         curr_x = (event.pos().x() - img_rect.x()) / img_rect.width()
                         curr_y = (event.pos().y() - img_rect.y()) / img_rect.height()
-                        x1 = min(self.selection_start_norm.x(), curr_x)
-                        y1 = min(self.selection_start_norm.y(), curr_y)
+                        
                         w = abs(curr_x - self.selection_start_norm.x())
                         h = abs(curr_y - self.selection_start_norm.y())
+                        
+                        # Constraint: 2:1 Minimum Aspect Ratio
+                        # If horizontal (w > h), ensure w >= 2*h
+                        # If vertical (h > w), ensure h >= 2*w
+                        if w > h:
+                            if w < 2 * h: w = 2 * h
+                        elif h > w:
+                            if h < 2 * w: h = 2 * w
+                            
+                        x1 = self.selection_start_norm.x() if curr_x > self.selection_start_norm.x() else self.selection_start_norm.x() - w
+                        y1 = self.selection_start_norm.y() if curr_y > self.selection_start_norm.y() else self.selection_start_norm.y() - h
+                        
                         self.selection_norm = QRectF(x1, y1, w, h)
                         self.update_display()
                 return True
-                
+            
             elif event.type() == QEvent.Type.MouseButtonRelease:
                 self.panning = False
+                self.panning_selection = False
                 self.dragging_selection = False
                 self.setCursor(Qt.CursorShape.ArrowCursor)
                 return True
