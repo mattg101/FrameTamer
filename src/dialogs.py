@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFileDialog, QSlider, QSizePolicy,
                              QInputDialog, QListWidget, QListWidgetItem, QAbstractItemView)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon, QImage
 import os
 import threading
@@ -31,6 +31,12 @@ class TextureSamplerDialog(QDialog):
         self.last_mouse_pos = QPointF()
         self.selection_start_norm = QPointF()
         self.drag_mode = None # None, 'top_left', 'top_right', 'bottom_left', 'bottom_right', 'new'
+        
+        # Grid State
+        self.grid_visible = False
+        self.grid_timer = QTimer()
+        self.grid_timer.setSingleShot(True)
+        self.grid_timer.timeout.connect(self.hide_grid)
 
         # Layout
         layout = QVBoxLayout(self)
@@ -111,12 +117,21 @@ class TextureSamplerDialog(QDialog):
         self.pan = QPointF(0, 0)
         self.selection_norm = QRectF(0.2, 0.4, 0.6, 0.2)
         self.update_display()
+    
+    def hide_grid(self):
+        self.grid_visible = False
+        self.update_display()
 
     def on_rotation_changed(self):
         if not self.pixmap_orig: return
         deg = self.slider_rot.value() / 10.0
         t = QTransform().rotate(deg)
         self.pixmap_rotated = self.pixmap_orig.transformed(t, Qt.TransformationMode.SmoothTransformation)
+        
+        # Show grid for 500ms
+        self.grid_visible = True
+        self.grid_timer.start(500)
+        
         # FIX: Do NOT reset view here, just update display to keep zoom/pan
         self.update_display()
 
@@ -155,15 +170,16 @@ class TextureSamplerDialog(QDialog):
         p.drawPixmap(img_rect.toRect(), self.pixmap_rotated)
         
         # Draw Grid Overlay (Helpful for straightening)
-        # 5x5 grid
-        p.setPen(QPen(QColor(255, 255, 255, 60), 1, Qt.PenStyle.DashLine))
-        for i in range(1, 5):
-            # Vertical lines
-            vx = img_rect.x() + (img_rect.width() * i / 5.0)
-            p.drawLine(QPointF(vx, img_rect.top()), QPointF(vx, img_rect.bottom()))
-            # Horizontal lines
-            vy = img_rect.y() + (img_rect.height() * i / 5.0)
-            p.drawLine(QPointF(img_rect.left(), vy), QPointF(img_rect.right(), vy))
+        # 10x10 grid, only visible during/after rotation
+        if self.grid_visible:
+            p.setPen(QPen(QColor(255, 255, 255, 60), 1, Qt.PenStyle.DashLine))
+            for i in range(1, 10):
+                # Vertical lines
+                vx = img_rect.x() + (img_rect.width() * i / 10.0)
+                p.drawLine(QPointF(vx, img_rect.top()), QPointF(vx, img_rect.bottom()))
+                # Horizontal lines
+                vy = img_rect.y() + (img_rect.height() * i / 10.0)
+                p.drawLine(QPointF(img_rect.left(), vy), QPointF(img_rect.right(), vy))
         
         sx = img_rect.x() + self.selection_norm.x() * img_rect.width()
         sy = img_rect.y() + self.selection_norm.y() * img_rect.height()
