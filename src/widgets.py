@@ -1,6 +1,6 @@
 import math
-from PyQt6.QtWidgets import QLabel, QSizePolicy
-from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF, QSize
+from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget, QVBoxLayout, QToolButton, QFrame
+from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF, QSize, QPropertyAnimation, QParallelAnimationGroup, QAbstractAnimation
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QRegion, QPolygonF, QBrush, QTransform
 
 from .utils import get_fit_metrics, UnitUtils, draw_physical_grid
@@ -331,3 +331,46 @@ class FramePreviewLabel(QLabel):
         self.setPixmap(final)
 
     def resizeEvent(self, event): self.refresh_render(); super().resizeEvent(event)
+
+class CollapsibleBox(QWidget):
+    def __init__(self, title="", parent=None):
+        super().__init__(parent)
+
+        self.toggle_button = QToolButton(text=title, checkable=True, checked=True)
+        self.toggle_button.setStyleSheet("QToolButton { border: none; font-weight: bold; background-color: #333; padding: 5px; }")
+        self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
+        self.toggle_button.pressed.connect(self.on_pressed)
+
+        self.content_area = QWidget()
+        self.content_area.setMaximumHeight(0)
+        self.content_area.setMinimumHeight(0)
+        
+        self.toggle_animation = QPropertyAnimation(self.content_area, b"maximumHeight")
+        self.toggle_animation.setDuration(300)
+        self.toggle_animation.setStartValue(0)
+        self.toggle_animation.setEndValue(1000) # Arbitrary large value
+
+        self.main_layout = QVBoxLayout(self)
+        self.main_layout.setSpacing(0)
+        self.main_layout.setContentsMargins(0, 0, 0, 0)
+        self.main_layout.addWidget(self.toggle_button)
+        self.main_layout.addWidget(self.content_area)
+
+        self.on_pressed() # Initialize state
+
+    def on_pressed(self):
+        checked = not self.toggle_button.isChecked()
+        self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+        self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward if checked else QAbstractAnimation.Direction.Backward)
+        self.toggle_animation.start()
+
+    def set_content_layout(self, layout):
+        old_layout = self.content_area.layout()
+        if old_layout:
+            import sip
+            sip.delete(old_layout)
+        self.content_area.setLayout(layout)
+        collapsed_height = self.sizeHint().height() - self.content_area.maximumHeight()
+        content_height = layout.sizeHint().height()
+        self.toggle_animation.setEndValue(content_height)

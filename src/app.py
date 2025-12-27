@@ -14,7 +14,7 @@ from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter,
 
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
 from .utils import UnitUtils
-from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel
+from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox
 from .dialogs import TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, GooglePhotosDialog
 
 class FrameApp(QMainWindow):
@@ -84,21 +84,56 @@ class FrameApp(QMainWindow):
 
     def setup_ui(self):
         central = QWidget(); self.setCentralWidget(central)
-        main_layout = QHBoxLayout(central); main_layout.setSpacing(20); main_layout.setContentsMargins(20, 20, 20, 20)
+        main_v_layout = QVBoxLayout(central); main_v_layout.setSpacing(10); main_v_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Top Export Panel
+        self.setup_export_panel(main_v_layout)
+
+        # Workspace split
+        workspace_layout = QHBoxLayout(); workspace_layout.setSpacing(15)
+        main_v_layout.addLayout(workspace_layout)
 
         panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(320)
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setFixedWidth(280) 
+        scroll_area.setFixedWidth(290) 
         
         self.controls = QWidget()
-        self.c_layout = QVBoxLayout(self.controls)
+        self.c_layout = QVBoxLayout(self.controls); self.c_layout.setSpacing(6); self.c_layout.setContentsMargins(5, 5, 5, 5)
         self.setup_controls_content()
         
         scroll_area.setWidget(self.controls)
         panel_layout.addWidget(scroll_area)
-        main_layout.addWidget(panel_container)
-        self.setup_visualization_area(main_layout)
+        workspace_layout.addWidget(panel_container)
+        self.setup_visualization_area(workspace_layout)
         self.update_ui_visibility()
+
+    def setup_export_panel(self, parent_layout):
+        export_panel = QFrame()
+        export_panel.setStyleSheet("QFrame { background-color: #2d2d2d; border-radius: 6px; }")
+        layout = QHBoxLayout(export_panel); layout.setContentsMargins(15, 8, 15, 8); layout.setSpacing(15)
+        
+        title = QLabel("<b>FrameTamer Pro</b>")
+        layout.addWidget(title)
+        layout.addStretch()
+
+        layout.addWidget(QLabel("DPI:"))
+        self.combo_dpi = QComboBox()
+        self.combo_dpi.addItems(["72", "150", "300", "600"])
+        self.combo_dpi.setCurrentText("300")
+        self.combo_dpi.setFixedWidth(60)
+        layout.addWidget(self.combo_dpi)
+
+        btn_pdf = QPushButton("Export Mat Blueprint (PDF)")
+        btn_pdf.setStyleSheet("background-color: #d83b01; font-weight: bold; padding: 6px 12px; border-radius: 4px; color: white;")
+        btn_pdf.clicked.connect(self.export_pdf)
+        layout.addWidget(btn_pdf)
+
+        btn_jpg = QPushButton("Save for Print (JPG)")
+        btn_jpg.setStyleSheet("background-color: #107c10; font-weight: bold; padding: 6px 12px; border-radius: 4px; color: white;")
+        btn_jpg.clicked.connect(self.export_jpg) # To be implemented
+        layout.addWidget(btn_jpg)
+
+        parent_layout.addWidget(export_panel)
 
     def setup_controls_content(self):
         # Defaults Editor at Top
@@ -139,9 +174,14 @@ class FrameApp(QMainWindow):
         v_units.addWidget(self.rb_imp); v_units.addWidget(self.rb_met)
         h_top.addLayout(v_units); self.c_layout.addLayout(h_top)
 
-        self.gb_frame = QGroupBox("Frame Aperture (Visible Opening)"); gl_f = QGridLayout()
-        self.spin_iw = self._add_spin(gl_f, 0, "Aperture Width:", 16.0)
-        self.spin_ih = self._add_spin(gl_f, 1, "Aperture Height:", 20.0)
+        # Consolidate Frame Aperture and Profile into a Collapsible Box
+        self.collapsible_specs = CollapsibleBox("Frame Specs")
+        specs_layout = QVBoxLayout()
+        specs_layout.setSpacing(4)
+
+        self.gb_frame = QGroupBox("Aperture (Visible Opening)"); gl_f = QGridLayout(); gl_f.setSpacing(4)
+        self.spin_iw = self._add_spin(gl_f, 0, "Width:", 16.0)
+        self.spin_ih = self._add_spin(gl_f, 1, "Height:", 20.0)
         
         h_preset = QHBoxLayout()
         self.combo_presets = QComboBox(); self.combo_presets.addItem("Select Preset..."); self.combo_presets.currentIndexChanged.connect(self.on_preset_selected)
@@ -152,24 +192,29 @@ class FrameApp(QMainWindow):
         
         btn_swap = QPushButton("Swap W/H"); btn_swap.clicked.connect(self.swap_frame_dims)
         gl_f.addWidget(btn_swap, 3, 0, 1, 2)
-        self.gb_frame.setLayout(gl_f); self.c_layout.addWidget(self.gb_frame)
+        self.gb_frame.setLayout(gl_f)
+        specs_layout.addWidget(self.gb_frame)
         self.refresh_preset_list()
 
-        self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout()
+        self.gb_profile = QGroupBox("Frame Profile"); gl_p = QGridLayout(); gl_p.setSpacing(4)
+        self.spin_face = self._add_spin(gl_p, 0, "Face Width:", 0.75)
+        self.spin_rabbet = self._add_spin(gl_p, 1, "Rabbet Width:", 0.25)
+        self.gb_profile.setLayout(gl_p)
+        specs_layout.addWidget(self.gb_profile)
+
+        self.collapsible_specs.set_content_layout(specs_layout)
+        self.c_layout.addWidget(self.collapsible_specs)
+
+        self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout(); gl_a.setSpacing(4)
         self.rb_driver_w = QRadioButton("W"); self.rb_driver_w.setChecked(True)
         self.rb_driver_h = QRadioButton("H")
         bg_d = QButtonGroup(self); bg_d.addButton(self.rb_driver_w); bg_d.addButton(self.rb_driver_h)
         bg_d.buttonClicked.connect(self.recalc_aspect)
-        self.spin_art_w = self._add_spin(gl_a, 0, "Art W:", 10.0, extra=self.rb_driver_w)
-        self.spin_art_h = self._add_spin(gl_a, 1, "Art H:", 8.0, extra=self.rb_driver_h)
+        self.spin_art_w = self._add_spin(gl_a, 0, "W:", 10.0, extra=self.rb_driver_w)
+        self.spin_art_h = self._add_spin(gl_a, 1, "H:", 8.0, extra=self.rb_driver_h)
         self.spin_art_w.valueChanged.connect(self.on_art_w_changed)
         self.spin_art_h.valueChanged.connect(self.on_art_h_changed)
         self.gb_art_specs.setLayout(gl_a); self.c_layout.addWidget(self.gb_art_specs)
-
-        self.gb_profile = QGroupBox("Frame Profile"); gl_p = QGridLayout()
-        self.spin_face = self._add_spin(gl_p, 0, "Face Width:", 0.75)
-        self.spin_rabbet = self._add_spin(gl_p, 1, "Rabbet Width:", 0.25)
-        self.gb_profile.setLayout(gl_p); self.c_layout.addWidget(self.gb_profile)
 
         self.gb_mat_rules = QGroupBox("Mat Rules"); l_mr = QFormLayout()
         self.combo_fix = QComboBox(); self.combo_fix.addItems(["No Fixed Side", "Fix Top", "Fix Bottom", "Fix Left", "Fix Right"])
@@ -220,13 +265,13 @@ class FrameApp(QMainWindow):
         self.spin_print_border = self._create_spin(0.25); l_mnt.addRow("Print Border:", self.spin_print_border)
         gb_mnt.setLayout(l_mnt); self.c_layout.addWidget(gb_mnt)
 
-        self.lbl_stats = QLabel("Load image..."); self.lbl_stats.setStyleSheet("font-family: 'Consolas', monospace; font-size: 11px; margin-top: 10px;")
+        self.lbl_stats = QLabel("Load image..."); self.lbl_stats.setStyleSheet("font-family: 'Consolas', monospace; font-size: 11px; margin-top: 5px; line-height: 100%;")
         self.lbl_stats.setWordWrap(True); self.c_layout.addWidget(self.lbl_stats)
         
-        btn_pdf = QPushButton("Export Mat Blueprint (PDF)"); btn_pdf.setStyleSheet("background-color: #d83b01; font-weight: bold; margin-top: 20px; padding: 10px; color: white;")
-        btn_pdf.clicked.connect(self.export_pdf); self.c_layout.addWidget(btn_pdf)
-        
         self.c_layout.addStretch()
+
+    def export_jpg(self):
+        QMessageBox.information(self, "Coming Soon", "JPG Export with custom DPI is under development.")
 
     def _create_spin(self, val):
         s = QDoubleSpinBox(); s.setRange(0, 99999); s.setDecimals(3); s.setValue(val); s.valueChanged.connect(self.recalc)
@@ -307,8 +352,15 @@ class FrameApp(QMainWindow):
     # --- LOGIC ---
     def update_ui_visibility(self):
         fixed = self.rb_mode_frame.isChecked()
-        self.gb_frame.setVisible(fixed); self.gb_mat_rules.setVisible(fixed)
-        self.gb_art_specs.setVisible(not fixed); self.gb_mat_dims.setVisible(not fixed)
+        self.gb_frame.setVisible(fixed)
+        self.gb_mat_rules.setVisible(fixed)
+        self.gb_art_specs.setVisible(not fixed)
+        self.gb_mat_dims.setVisible(not fixed)
+        
+        # If aperture is hidden, make sure the collapsible header is updated
+        # or maybe we keep it visible since Profile is always inside it?
+        # Yes, Profile is always there, so Collapsible Specs stays visible.
+        
         self.stack_editors.setCurrentWidget(self.editor_cropper if fixed else self.editor_mat)
         self.recalc()
 
