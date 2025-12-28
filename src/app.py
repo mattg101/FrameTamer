@@ -139,6 +139,11 @@ class FrameApp(QMainWindow):
         act_toggle_units = QAction("Toggle Units (In/MM)", self); act_toggle_units.triggered.connect(self.toggle_units_menu)
         pref_menu.addAction(act_toggle_units)
         
+        # Editor: Defaults Mode
+        self.act_defaults_mode = QAction("Editor: Defaults Mode", self, checkable=True)
+        self.act_defaults_mode.triggered.connect(self.toggle_defaults_mode)
+        pref_menu.addAction(self.act_defaults_mode)
+        
         act_save_defaults = QAction("Save Current as Default", self); act_save_defaults.triggered.connect(self.save_as_defaults)
         pref_menu.addAction(act_save_defaults)
 
@@ -266,9 +271,9 @@ class FrameApp(QMainWindow):
         workspace_layout = QHBoxLayout(); workspace_layout.setSpacing(15)
         main_v_layout.addLayout(workspace_layout)
 
-        panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(320)
+        panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(360)
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setFixedWidth(290) 
+        scroll_area.setFixedWidth(330) 
         
         self.controls = QWidget()
         self.c_layout = QVBoxLayout(self.controls); self.c_layout.setSpacing(6); self.c_layout.setContentsMargins(5, 5, 5, 5)
@@ -416,12 +421,7 @@ class FrameApp(QMainWindow):
         self.group_app.set_content_layout(l_app)
         self.c_layout.addWidget(self.group_app)
 
-        # 4. Defaults Mode Button (Preserved)
-        self.btn_defaults_mode = QPushButton("Editor: Defaults Mode [OFF]")
-        self.btn_defaults_mode.setCheckable(True)
-        self.btn_defaults_mode.clicked.connect(self.toggle_defaults_mode)
-        self.btn_defaults_mode.setStyleSheet("padding: 8px; font-weight: bold; margin-top: 10px;")
-        self.c_layout.addWidget(self.btn_defaults_mode)
+        # 4. Defaults Mode Button (Removed, now in menu)
 
         # 5. Metrics
         self.card_metrics = MetricCard("Final Dimensions")
@@ -528,9 +528,12 @@ class FrameApp(QMainWindow):
         self.recalc()
 
     def toggle_defaults_mode(self):
-        self.defaults_mode = self.btn_defaults_mode.isChecked()
-        self.btn_defaults_mode.setText(f"Editor: Defaults Mode [{'ON' if self.defaults_mode else 'OFF'}]")
-        self.btn_save_defaults.setVisible(self.defaults_mode)
+        self.defaults_mode = self.act_defaults_mode.isChecked()
+        # self.btn_defaults_mode.setText(f"Editor: Defaults Mode [{'ON' if self.defaults_mode else 'OFF'}]")
+        # self.btn_save_defaults.setVisible(self.defaults_mode) 
+        # Button removed, verify if logic needs other updates?
+        # Actually, self.btn_save_defaults was also hidden in previous layout. 
+        # The logic highlighting fields is still valid.
         
         # Define fields that are "defaults"
         default_fields = [self.spin_iw, self.spin_ih, self.spin_face, self.spin_rabbet, self.spin_print_border,
@@ -768,11 +771,15 @@ class FrameApp(QMainWindow):
                         f"T: {UnitUtils.format_dual(fmt * to_in, u)} | B: {UnitUtils.format_dual(fmb * to_in, u)}<br>"
                         f"L: {UnitUtils.format_dual(fml * to_in, u)} | R: {UnitUtils.format_dual(fmr * to_in, u)}<br><br>")
 
-        self.card_metrics.update_metrics(
-            ow * to_in, oh * to_in,
-            self.last_calc['cut_w'], self.last_calc['cut_h'],
-            u
-        )
+        self.card_metrics.update_metrics({
+            'outer_w': ow * to_in, 'outer_h': oh * to_in,
+            'cut_w': self.last_calc['cut_w'], 'cut_h': self.last_calc['cut_h'],
+            'img_w': self.last_calc['img_w'], 'img_h': self.last_calc['img_h'],
+            'print_w': self.last_calc['print_w'], 'print_h': self.last_calc['print_h'],
+            'mat_t': fmt * to_in, 'mat_b': fmb * to_in, 'mat_l': fml * to_in, 'mat_r': fmr * to_in,
+            'unit': u,
+            'no_mat': self.last_calc['no_mat']
+        })
         
     def draw_dimension(self, p, start, end, text, offset, is_vert):
         p.setPen(QPen(Qt.GlobalColor.black, 3)); p.setBrush(Qt.BrushStyle.NoBrush); p.setFont(QFont(p.font().family(), 10))

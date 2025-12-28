@@ -1,5 +1,5 @@
 import math
-from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget, QVBoxLayout, QToolButton, QFrame
+from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget, QVBoxLayout, QToolButton, QFrame, QGridLayout
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF, QSize, QPropertyAnimation, QParallelAnimationGroup, QAbstractAnimation
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QRegion, QPolygonF, QBrush, QTransform
 
@@ -386,28 +386,76 @@ class MetricCard(QFrame):
                 padding: 10px;
                 margin-top: 10px;
             }
-            QLabel { color: #ddd; }
+            QLabel { color: #ddd; font-size: 11px; }
+            QLabel.title { font-size: 14px; font-weight: bold; color: #aaa; }
+            QLabel.primary { font-size: 24px; font-weight: bold; color: #4facfe; }
+            QLabel.label { color: #888; font-weight: bold; }
         """)
         
         layout = QVBoxLayout(self)
-        layout.setSpacing(5)
+        layout.setSpacing(8)
         
         self.lbl_title = QLabel(title)
-        self.lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #aaa;")
+        self.lbl_title.setProperty("class", "title")
         self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_title)
         
         self.lbl_primary = QLabel("-- x --")
-        self.lbl_primary.setStyleSheet("font-size: 24px; font-weight: bold; color: #4facfe;") # Cyan/Blue accent
+        self.lbl_primary.setWordWrap(True)
+        self.lbl_primary.setProperty("class", "primary")
         self.lbl_primary.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_primary)
         
-        self.lbl_secondary = QLabel("Cut Size: -- x --")
-        self.lbl_secondary.setStyleSheet("font-size: 12px; color: #888;")
-        self.lbl_secondary.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.lbl_secondary)
+        # Details Grid
+        self.grid_details = QGridLayout()
+        self.grid_details.setSpacing(4)
+        
+        # Row 1: Cut Size | Aperture
+        self.grid_details.addWidget(QLabel("Cut Size:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        self.lbl_cut = QLabel("--"); self.grid_details.addWidget(self.lbl_cut, 0, 1)
+        
+        self.grid_details.addWidget(QLabel("Aperture:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.lbl_aperture = QLabel("--"); self.grid_details.addWidget(self.lbl_aperture, 0, 3)
+        
+        # Row 2: Print Size
+        self.grid_details.addWidget(QLabel("Print Size:"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        self.lbl_print = QLabel("--"); self.grid_details.addWidget(self.lbl_print, 1, 1, 1, 3)
+        
+        # Row 3: Mat Borders
+        self.grid_details.addWidget(QLabel("Mat T/B:"), 2, 0, Qt.AlignmentFlag.AlignRight)
+        self.lbl_mat_tb = QLabel("--"); self.grid_details.addWidget(self.lbl_mat_tb, 2, 1)
+        
+        self.grid_details.addWidget(QLabel("Mat L/R:"), 2, 2, Qt.AlignmentFlag.AlignRight)
+        self.lbl_mat_lr = QLabel("--"); self.grid_details.addWidget(self.lbl_mat_lr, 2, 3)
+        
+        layout.addLayout(self.grid_details)
 
-    def update_metrics(self, w_outer, h_outer, w_cut, h_cut, unit):
-        u = unit
-        self.lbl_primary.setText(f"{UnitUtils.format_dual(w_outer, u)} x {UnitUtils.format_dual(h_outer, u)}")
-        self.lbl_secondary.setText(f"Aperture/Cut: {UnitUtils.format_dual(w_cut, u)} x {UnitUtils.format_dual(h_cut, u)}")
+    def update_metrics(self, data):
+        # data = {outer_w, outer_h, cut_w, cut_h, img_w, img_h, print_w, print_h, mat_t, mat_b, mat_l, mat_r, unit, no_mat}
+        u = data.get('unit', 'in')
+        
+        ow, oh = data.get('outer_w', 0), data.get('outer_h', 0)
+        self.lbl_primary.setText(f"{UnitUtils.format_dual(ow, u)} x {UnitUtils.format_dual(oh, u)}")
+        
+        cw, ch = data.get('cut_w', 0), data.get('cut_h', 0)
+        self.lbl_cut.setText(f"{UnitUtils.format_dual(cw, u)} x {UnitUtils.format_dual(ch, u)}")
+        
+        iw, ih = data.get('img_w', 0), data.get('img_h', 0)
+        self.lbl_aperture.setText(f"{UnitUtils.format_dual(iw, u)} x {UnitUtils.format_dual(ih, u)}")
+        
+        pw, ph = data.get('print_w', 0), data.get('print_h', 0)
+        self.lbl_print.setText(f"{UnitUtils.format_dual(pw, u)} x {UnitUtils.format_dual(ph, u)}")
+        
+        if data.get('no_mat', False):
+            self.lbl_mat_tb.setText("N/A")
+            self.lbl_mat_lr.setText("N/A")
+        else:
+            # Convert mat dimensions to inch for display normalization if needed, 
+            # but usually they are passed as raw floats.
+            # Assuming data passed in is already in inches, except for the unit flag.
+            
+            mt, mb = data.get('mat_t', 0), data.get('mat_b', 0)
+            ml, mr = data.get('mat_l', 0), data.get('mat_r', 0)
+            
+            self.lbl_mat_tb.setText(f"{UnitUtils.format_dual(mt, u)} / {UnitUtils.format_dual(mb, u)}")
+            self.lbl_mat_lr.setText(f"{UnitUtils.format_dual(ml, u)} / {UnitUtils.format_dual(mr, u)}")
