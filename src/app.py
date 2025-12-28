@@ -15,7 +15,7 @@ from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter,
 
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
 from .utils import UnitUtils
-from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox
+from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox, MetricCard
 from .dialogs import (TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, 
                       GooglePhotosDialog, TutorialDialog, AboutDialog)
 
@@ -63,10 +63,9 @@ class FrameApp(QMainWindow):
         if frame_col: self.frame_color = QColor(frame_col)
         
         # Load units
-        unit = settings.value("unit", "in")
-        if unit == "mm": self.rb_met.setChecked(True)
-        else: self.rb_imp.setChecked(True)
-        self.unit = unit
+        self.unit = settings.value("unit", "in")
+        step_size = 2.0 if self.unit == "mm" else 0.125
+        for s in self.unit_inputs: s.setSingleStep(step_size)
         
         # Load Mat Rules
         self.combo_fix.setCurrentIndex(int(settings.value("mat_fix_id", 0)))
@@ -139,6 +138,9 @@ class FrameApp(QMainWindow):
         
         act_toggle_units = QAction("Toggle Units (In/MM)", self); act_toggle_units.triggered.connect(self.toggle_units_menu)
         pref_menu.addAction(act_toggle_units)
+        
+        act_save_defaults = QAction("Save Current as Default", self); act_save_defaults.triggered.connect(self.save_as_defaults)
+        pref_menu.addAction(act_save_defaults)
 
         # Help
         help_menu = menubar.addMenu("Help")
@@ -197,8 +199,12 @@ class FrameApp(QMainWindow):
             with open(path, 'r') as f: data = json.load(f)
             
             self.defaults_mode = True
-            if data.get("unit") == "mm": self.rb_met.setChecked(True)
-            else: self.rb_imp.setChecked(True)
+            if data.get("unit") == "mm": 
+                self.unit = "mm"
+                for s in self.unit_inputs: s.setSingleStep(2.0)
+            else: 
+                self.unit = "in"
+                for s in self.unit_inputs: s.setSingleStep(0.125)
             
             if data.get("mode") == "art": self.act_mode_art.setChecked(True)
             else: self.act_mode_frame.setChecked(True)
@@ -243,8 +249,8 @@ class FrameApp(QMainWindow):
                 self.menu_recent.addAction(a)
 
     def toggle_units_menu(self):
-        if self.rb_imp.isChecked(): self.rb_met.setChecked(True)
-        else: self.rb_imp.setChecked(True)
+        target = "mm" if self.unit == "in" else "in"
+        self.convert_to_unit(target)
 
     def open_tutorial(self): TutorialDialog(self).show()
     def open_about(self): AboutDialog(self).show()
@@ -303,68 +309,53 @@ class FrameApp(QMainWindow):
         parent_layout.addWidget(export_panel)
 
     def setup_controls_content(self):
-        # Defaults Editor at Top
-        self.btn_defaults_mode = QPushButton("Editor: Defaults Mode [OFF]")
-        self.btn_defaults_mode.setCheckable(True)
-        self.btn_defaults_mode.clicked.connect(self.toggle_defaults_mode)
-        self.btn_defaults_mode.setStyleSheet("padding: 8px; font-weight: bold;")
-        self.c_layout.addWidget(self.btn_defaults_mode)
-
-        self.btn_save_defaults = QPushButton("Save Current as Defaults")
-        self.btn_save_defaults.clicked.connect(self.save_as_defaults)
-        self.btn_save_defaults.setStyleSheet("background-color: #ffc107; color: black; font-weight: bold; padding: 8px;")
-        self.btn_save_defaults.hide()
-        self.c_layout.addWidget(self.btn_save_defaults)
+        # 1. Source Media Group
+        self.group_media = CollapsibleBox("Source Media")
+        l_media = QVBoxLayout(); l_media.setSpacing(6)
         
-        line = QFrame(); line.setFrameShape(QFrame.Shape.HLine); line.setFrameShadow(QFrame.Shadow.Sunken)
-        self.c_layout.addWidget(line)
-
-        h_top = QHBoxLayout()
+        h_import = QHBoxLayout()
         btn_import = QPushButton("Import Photo"); btn_import.clicked.connect(self.import_image)
-        btn_import.setStyleSheet("background-color: #0078d7; font-weight: bold; padding: 8px; color: white;")
+        btn_import.setStyleSheet("background-color: #0078d7; font-weight: bold; padding: 6px; color: white;")
         btn_google = QPushButton("Google Photos"); btn_google.clicked.connect(self.load_from_google_photos)
-        btn_google.setStyleSheet("background-color: #4285F4; color: white; font-weight: bold; padding: 8px;")
-        h_top.addWidget(btn_import); h_top.addWidget(btn_google)
+        btn_google.setStyleSheet("background-color: #4285F4; color: white; font-weight: bold; padding: 6px;")
+        h_import.addWidget(btn_import); h_import.addWidget(btn_google)
+        l_media.addLayout(h_import)
         
-        v_units = QVBoxLayout()
-        v_units = QVBoxLayout()
-        self.rb_imp = QRadioButton("Inches"); self.rb_met = QRadioButton("MM"); self.rb_imp.setChecked(True)
-        self.bg_units = QButtonGroup(self); self.bg_units.addButton(self.rb_imp); self.bg_units.addButton(self.rb_met)
-        self.rb_imp.toggled.connect(self.toggle_units); self.rb_met.toggled.connect(self.toggle_units)
-        v_units.addWidget(self.rb_imp); v_units.addWidget(self.rb_met)
-        h_top.addLayout(v_units); self.c_layout.addLayout(h_top)
+        h_tex = QHBoxLayout()
+        self.btn_extract_tex = QPushButton("Extract Texture"); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
+        self.btn_lib_tex = QPushButton("Texture Library"); self.btn_lib_tex.clicked.connect(self.select_from_library)
+        h_tex.addWidget(self.btn_extract_tex); h_tex.addWidget(self.btn_lib_tex)
+        l_media.addLayout(h_tex)
+        
+        self.group_media.set_content_layout(l_media)
+        self.c_layout.addWidget(self.group_media)
 
-        # Consolidate Frame Aperture and Profile into a Collapsible Box
-        self.collapsible_specs = CollapsibleBox("Frame Specs")
-        specs_layout = QVBoxLayout()
-        specs_layout.setSpacing(4)
-
+        # 2. Dimensions Group
+        self.group_dims = CollapsibleBox("Dimensions")
+        l_dims = QVBoxLayout(); l_dims.setSpacing(8)
+        
+        # Frame Aperture
         self.gb_frame = QGroupBox("Aperture (Visible Opening)"); gl_f = QGridLayout(); gl_f.setSpacing(4)
         self.spin_iw = self._add_spin(gl_f, 0, "Width:", 16.0)
         self.spin_ih = self._add_spin(gl_f, 1, "Height:", 20.0)
-        
         h_preset = QHBoxLayout()
         self.combo_presets = QComboBox(); self.combo_presets.addItem("Select Preset..."); self.combo_presets.currentIndexChanged.connect(self.on_preset_selected)
         btn_save_preset = QPushButton("Save"); btn_save_preset.setFixedWidth(50); btn_save_preset.clicked.connect(self.save_preset)
         btn_manage_presets = QPushButton("..."); btn_manage_presets.setFixedWidth(30); btn_manage_presets.clicked.connect(self.manage_presets)
         h_preset.addWidget(self.combo_presets); h_preset.addWidget(btn_save_preset); h_preset.addWidget(btn_manage_presets)
         gl_f.addLayout(h_preset, 2, 0, 1, 2)
-        
         btn_swap = QPushButton("Swap W/H"); btn_swap.clicked.connect(self.swap_frame_dims)
         gl_f.addWidget(btn_swap, 3, 0, 1, 2)
-        self.gb_frame.setLayout(gl_f)
-        specs_layout.addWidget(self.gb_frame)
+        self.gb_frame.setLayout(gl_f); l_dims.addWidget(self.gb_frame)
         self.refresh_preset_list()
 
+        # Frame Profile
         self.gb_profile = QGroupBox("Frame Profile"); gl_p = QGridLayout(); gl_p.setSpacing(4)
         self.spin_face = self._add_spin(gl_p, 0, "Face Width:", 0.75)
         self.spin_rabbet = self._add_spin(gl_p, 1, "Rabbet Width:", 0.25)
-        self.gb_profile.setLayout(gl_p)
-        specs_layout.addWidget(self.gb_profile)
+        self.gb_profile.setLayout(gl_p); l_dims.addWidget(self.gb_profile)
 
-        self.collapsible_specs.set_content_layout(specs_layout)
-        self.c_layout.addWidget(self.collapsible_specs)
-
+        # Art Specs
         self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout(); gl_a.setSpacing(4)
         self.rb_driver_w = QRadioButton("W"); self.rb_driver_w.setChecked(True)
         self.rb_driver_h = QRadioButton("H")
@@ -374,8 +365,9 @@ class FrameApp(QMainWindow):
         self.spin_art_h = self._add_spin(gl_a, 1, "H:", 8.0, extra=self.rb_driver_h)
         self.spin_art_w.valueChanged.connect(self.on_art_w_changed)
         self.spin_art_h.valueChanged.connect(self.on_art_h_changed)
-        self.gb_art_specs.setLayout(gl_a); self.c_layout.addWidget(self.gb_art_specs)
+        self.gb_art_specs.setLayout(gl_a); l_dims.addWidget(self.gb_art_specs)
 
+        # Mat Rules
         self.gb_mat_rules = QGroupBox("Mat Rules"); l_mr = QFormLayout()
         self.combo_fix = QComboBox(); self.combo_fix.addItems(["No Fixed Side", "Fix Top", "Fix Bottom", "Fix Left", "Fix Right"])
         self.combo_fix.currentIndexChanged.connect(self.recalc)
@@ -386,47 +378,56 @@ class FrameApp(QMainWindow):
         l_mr.addRow("Constraint:", self.combo_fix); l_mr.addRow("Fixed Size:", self.spin_fix_val)
         l_mr.addRow("", self.chk_link); l_mr.addRow("Min Gutter:", self.spin_min_gutter)
         l_mr.addRow("Alignment:", self.combo_align)
-        self.gb_mat_rules.setLayout(l_mr); self.c_layout.addWidget(self.gb_mat_rules)
+        self.gb_mat_rules.setLayout(l_mr); l_dims.addWidget(self.gb_mat_rules)
 
+        # Mat Borders
         self.gb_mat_dims = QGroupBox("Visible Mat Borders"); gl_md = QGridLayout()
         self.spin_mat_t = self._create_spin(2.0); self.spin_mat_b = self._create_spin(2.0)
         self.spin_mat_l = self._create_spin(2.0); self.spin_mat_r = self._create_spin(2.0)
         self.chk_link_all = QCheckBox("Link All Sides"); self.chk_link_all.setChecked(True)
         self.chk_no_mat = QCheckBox("No Mat (Direct to Frame)")
-        
         for s in [self.spin_mat_t, self.spin_mat_b, self.spin_mat_l, self.spin_mat_r]: s.valueChanged.connect(self.sync_mats)
         self.chk_link_all.stateChanged.connect(self.sync_mats)
         self.chk_no_mat.stateChanged.connect(self.toggle_no_mat)
-        
         gl_md.addWidget(self.chk_no_mat, 0, 0, 1, 2)
         gl_md.addWidget(QLabel("Top:"), 1, 0); gl_md.addWidget(self.spin_mat_t, 1, 1)
         gl_md.addWidget(QLabel("Bottom:"), 2, 0); gl_md.addWidget(self.spin_mat_b, 2, 1)
         gl_md.addWidget(QLabel("Left:"), 3, 0); gl_md.addWidget(self.spin_mat_l, 3, 1)
         gl_md.addWidget(QLabel("Right:"), 4, 0); gl_md.addWidget(self.spin_mat_r, 4, 1)
         gl_md.addWidget(self.chk_link_all, 5, 0, 1, 2)
-        self.gb_mat_dims.setLayout(gl_md); self.c_layout.addWidget(self.gb_mat_dims)
+        self.gb_mat_dims.setLayout(gl_md); l_dims.addWidget(self.gb_mat_dims)
+        
+        # Mounting
+        gb_mnt = QGroupBox("Mounting"); l_mnt = QFormLayout()
+        self.spin_print_border = self._create_spin(0.25); l_mnt.addRow("Print Border:", self.spin_print_border)
+        gb_mnt.setLayout(l_mnt); l_dims.addWidget(gb_mnt)
 
+        self.group_dims.set_content_layout(l_dims)
+        self.c_layout.addWidget(self.group_dims)
+
+        # 3. Appearance Group
+        self.group_app = CollapsibleBox("Appearance")
+        l_app = QVBoxLayout()
         h_col = QHBoxLayout(); 
         b_mc = QPushButton("Mat Color"); b_mc.clicked.connect(self.pick_mat)
         b_fc = QPushButton("Frame Color"); b_fc.clicked.connect(self.pick_frame)
-        
         h_col.addWidget(b_mc); h_col.addWidget(b_fc)
-        self.c_layout.addLayout(h_col)
-        
-        h_tex = QHBoxLayout()
-        self.btn_extract_tex = QPushButton("Extract Texture")
-        self.btn_extract_tex.clicked.connect(self.load_frame_texture)
-        self.btn_lib_tex = QPushButton("Library")
-        self.btn_lib_tex.clicked.connect(self.select_from_library)
-        h_tex.addWidget(self.btn_extract_tex); h_tex.addWidget(self.btn_lib_tex)
-        self.c_layout.addLayout(h_tex)
+        l_app.addLayout(h_col)
+        self.group_app.set_content_layout(l_app)
+        self.c_layout.addWidget(self.group_app)
 
-        gb_mnt = QGroupBox("Mounting"); l_mnt = QFormLayout()
-        self.spin_print_border = self._create_spin(0.25); l_mnt.addRow("Print Border:", self.spin_print_border)
-        gb_mnt.setLayout(l_mnt); self.c_layout.addWidget(gb_mnt)
+        # 4. Defaults Mode Button (Preserved)
+        self.btn_defaults_mode = QPushButton("Editor: Defaults Mode [OFF]")
+        self.btn_defaults_mode.setCheckable(True)
+        self.btn_defaults_mode.clicked.connect(self.toggle_defaults_mode)
+        self.btn_defaults_mode.setStyleSheet("padding: 8px; font-weight: bold; margin-top: 10px;")
+        self.c_layout.addWidget(self.btn_defaults_mode)
 
-        self.lbl_stats = QLabel("Load image..."); self.lbl_stats.setStyleSheet("font-family: 'Consolas', monospace; font-size: 11px; margin-top: 5px; line-height: 100%;")
-        self.lbl_stats.setWordWrap(True); self.c_layout.addWidget(self.lbl_stats)
+        # 5. Metrics
+        self.card_metrics = MetricCard("Final Dimensions")
+        self.c_layout.addWidget(self.card_metrics)
+        self.lbl_stats = QLabel("") # Compatible dummy
+        self.lbl_stats.hide()
         
         self.c_layout.addStretch()
 
@@ -676,9 +677,7 @@ class FrameApp(QMainWindow):
                 self.btn_extract_tex.setText("Texture Loaded")
                 self.recalc()
 
-    def toggle_units(self):
-        if not self.sender().isChecked(): return
-        target = "mm" if self.rb_met.isChecked() else "in"
+    def convert_to_unit(self, target):
         if target == self.unit: return
         factor = 25.4 if target == "mm" else 1/25.4
         new_step = 2.0 if target == "mm" else 0.125
@@ -769,12 +768,10 @@ class FrameApp(QMainWindow):
                         f"T: {UnitUtils.format_dual(fmt * to_in, u)} | B: {UnitUtils.format_dual(fmb * to_in, u)}<br>"
                         f"L: {UnitUtils.format_dual(fml * to_in, u)} | R: {UnitUtils.format_dual(fmr * to_in, u)}<br><br>")
 
-        self.lbl_stats.setText(
-            f"<b>OUTER FRAME SIZE:</b><br>{UnitUtils.format_dual(ow * to_in, u)} x {UnitUtils.format_dual(oh * to_in, u)}<br><br>"
-            f"{mat_info}"
-            f"<b>MAT CUT SIZE:</b><br>{UnitUtils.format_dual(self.last_calc['cut_w'], u)} x {UnitUtils.format_dual(self.last_calc['cut_h'], u)}<br><br>"
-            f"<b>APERTURE:</b><br>{UnitUtils.format_dual(self.last_calc['img_w'], u)} x {UnitUtils.format_dual(self.last_calc['img_h'], u)}<br><br>"
-            f"<b>PRINT SIZE:</b><br>{UnitUtils.format_dual(self.last_calc['print_w'], u)} x {UnitUtils.format_dual(self.last_calc['print_h'], u)}"
+        self.card_metrics.update_metrics(
+            ow * to_in, oh * to_in,
+            self.last_calc['cut_w'], self.last_calc['cut_h'],
+            u
         )
         
     def draw_dimension(self, p, start, end, text, offset, is_vert):
@@ -838,5 +835,23 @@ class FrameApp(QMainWindow):
             px = (writer.width() - scaled_p.width()) / 2
             py = (writer.height() - scaled_p.height()) / 2
             painter.drawPixmap(int(px), int(py), scaled_p)
+        
+        painter.end(); del painter; del writer
+        QMessageBox.information(self, "Export Complete", f"Blueprint saved to: {fn}")
 
-        painter.end()
+    def save_as_defaults(self):
+        settings = QSettings("MattG", "FrameTamer")
+        settings.setValue("aperture_w", self.spin_iw.value())
+        settings.setValue("aperture_h", self.spin_ih.value())
+        settings.setValue("face_w", self.spin_face.value())
+        settings.setValue("rabbet_w", self.spin_rabbet.value())
+        settings.setValue("print_border", self.spin_print_border.value())
+        settings.setValue("mat_color", self.mat_color.name())
+        settings.setValue("frame_color", self.frame_color.name())
+        settings.setValue("unit", self.unit)
+        settings.setValue("mat_fix_id", self.combo_fix.currentIndex())
+        settings.setValue("mat_fixed_val", self.spin_fix_val.value())
+        settings.setValue("mat_match_opp", self.chk_link.isChecked())
+        settings.setValue("mat_gutter", self.spin_min_gutter.value())
+        settings.setValue("mat_align_id", self.combo_align.currentIndex())
+        QMessageBox.information(self, "Defaults Saved", "Current settings have been saved as defaults for new sessions.")

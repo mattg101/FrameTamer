@@ -371,4 +371,43 @@ class CollapsibleBox(QWidget):
             import sip
             sip.delete(old_layout)
         self.content_area.setLayout(layout)
-        self.content_area.setLayout(layout)
+
+class MetricCard(QFrame):
+    def __init__(self, title, parent=None):
+        super().__init__(parent)
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QFrame.Shadow.Raised)
+        # High visibility style
+        self.setStyleSheet("""
+            QFrame {
+                background-color: #2b2b2b;
+                border: 1px solid #444;
+                border-radius: 8px;
+                padding: 10px;
+                margin-top: 10px;
+            }
+            QLabel { color: #ddd; }
+        """)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(5)
+        
+        self.lbl_title = QLabel(title)
+        self.lbl_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #aaa;")
+        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_title)
+        
+        self.lbl_primary = QLabel("-- x --")
+        self.lbl_primary.setStyleSheet("font-size: 24px; font-weight: bold; color: #4facfe;") # Cyan/Blue accent
+        self.lbl_primary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_primary)
+        
+        self.lbl_secondary = QLabel("Cut Size: -- x --")
+        self.lbl_secondary.setStyleSheet("font-size: 12px; color: #888;")
+        self.lbl_secondary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_secondary)
+
+    def update_metrics(self, w_outer, h_outer, w_cut, h_cut, unit):
+        u = unit
+        self.lbl_primary.setText(f"{UnitUtils.format_dual(w_outer, u)} x {UnitUtils.format_dual(h_outer, u)}")
+        self.lbl_secondary.setText(f"Aperture/Cut: {UnitUtils.format_dual(w_cut, u)} x {UnitUtils.format_dual(h_cut, u)}")
