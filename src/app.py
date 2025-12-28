@@ -271,9 +271,9 @@ class FrameApp(QMainWindow):
         workspace_layout = QHBoxLayout(); workspace_layout.setSpacing(15)
         main_v_layout.addLayout(workspace_layout)
 
-        panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(360)
+        panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(400)
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setFixedWidth(330) 
+        scroll_area.setFixedWidth(370) 
         
         self.controls = QWidget()
         self.c_layout = QVBoxLayout(self.controls); self.c_layout.setSpacing(6); self.c_layout.setContentsMargins(5, 5, 5, 5)
@@ -290,11 +290,12 @@ class FrameApp(QMainWindow):
         export_panel.setStyleSheet("QFrame { background-color: #2d2d2d; border-radius: 6px; }")
         layout = QHBoxLayout(export_panel); layout.setContentsMargins(15, 8, 15, 8); layout.setSpacing(15)
         
-        title = QLabel("<b>FrameTamer Pro</b>")
+        title = QLabel("<b>FrameTamer Pro</b>"); title.setMinimumWidth(150)
         layout.addWidget(title)
         layout.addStretch()
 
-        layout.addWidget(QLabel("DPI:"))
+        lbl_dpi = QLabel("DPI: "); lbl_dpi.setMinimumWidth(40)
+        layout.addWidget(lbl_dpi)
         self.combo_dpi = QComboBox()
         self.combo_dpi.addItems(["72", "150", "300", "600"])
         self.combo_dpi.setCurrentText("300")
@@ -448,7 +449,8 @@ class FrameApp(QMainWindow):
 
     def setup_visualization_area(self, parent_layout):
         src_wid = QWidget(); src_l = QVBoxLayout(src_wid); src_l.setContentsMargins(0, 20, 0, 0)
-        h_head = QHBoxLayout(); h_head.addWidget(QLabel("<b>Source / Mat Editor</b>")); h_head.addStretch()
+        lbl_src = QLabel("<b>Source / Mat Editor</b>"); lbl_src.setMinimumWidth(200)
+        h_head = QHBoxLayout(); h_head.addWidget(lbl_src); h_head.addStretch()
         self.chk_grid_src = QCheckBox("Show Grid"); self.chk_grid_src.stateChanged.connect(self.toggle_grids)
         h_head.addWidget(self.chk_grid_src); src_l.addLayout(h_head)
         
@@ -460,7 +462,8 @@ class FrameApp(QMainWindow):
         src_l.addWidget(self.stack_editors)
 
         res_wid = QWidget(); res_l = QVBoxLayout(res_wid); res_l.setContentsMargins(0, 20, 0, 0)
-        h_p_head = QHBoxLayout(); h_p_head.addWidget(QLabel("<b>Final Preview</b>")); h_p_head.addStretch()
+        lbl_res = QLabel("<b>Final Preview</b>"); lbl_res.setMinimumWidth(150)
+        h_p_head = QHBoxLayout(); h_p_head.addWidget(lbl_res); h_p_head.addStretch()
         self.chk_grid_prev = QCheckBox("Show Grid"); self.chk_grid_prev.stateChanged.connect(self.toggle_grids)
         h_p_head.addWidget(self.chk_grid_prev); res_l.addLayout(h_p_head)
         self.preview = FramePreviewLabel(); res_l.addWidget(self.preview)
