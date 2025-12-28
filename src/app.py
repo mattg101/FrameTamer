@@ -274,7 +274,9 @@ class FrameApp(QMainWindow):
         QMessageBox.information(self, "Coming Soon", "JPG Export with custom DPI is under development.")
 
     def _create_spin(self, val):
-        s = QDoubleSpinBox(); s.setRange(0, 99999); s.setDecimals(3); s.setValue(val); s.valueChanged.connect(self.recalc)
+        s = QDoubleSpinBox(); s.setRange(0, 99999); s.setDecimals(3); s.setValue(val); 
+        s.setSingleStep(0.125) # Default 1/8"
+        s.valueChanged.connect(self.recalc)
         self.unit_inputs.append(s); return s
 
     def _add_spin(self, layout, row, label, val, extra=None):
@@ -518,8 +520,11 @@ class FrameApp(QMainWindow):
         target = "mm" if self.rb_met.isChecked() else "in"
         if target == self.unit: return
         factor = 25.4 if target == "mm" else 1/25.4
+        new_step = 2.0 if target == "mm" else 0.125
         self.updating_ui = True
-        for s in self.unit_inputs: s.setValue(s.value() * factor)
+        for s in self.unit_inputs: 
+            s.setValue(s.value() * factor)
+            s.setSingleStep(new_step)
         self.unit = target; self.updating_ui = False; self.recalc()
 
     def toggle_grids(self):
@@ -596,8 +601,15 @@ class FrameApp(QMainWindow):
         }
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
         u = self.unit
+        mat_info = ""
+        if not self.last_calc['no_mat']:
+            mat_info = (f"<b>MAT BORDERS:</b><br>"
+                        f"T: {UnitUtils.format_dual(fmt * to_in, u)} | B: {UnitUtils.format_dual(fmb * to_in, u)}<br>"
+                        f"L: {UnitUtils.format_dual(fml * to_in, u)} | R: {UnitUtils.format_dual(fmr * to_in, u)}<br><br>")
+
         self.lbl_stats.setText(
             f"<b>OUTER FRAME SIZE:</b><br>{UnitUtils.format_dual(ow * to_in, u)} x {UnitUtils.format_dual(oh * to_in, u)}<br><br>"
+            f"{mat_info}"
             f"<b>MAT CUT SIZE:</b><br>{UnitUtils.format_dual(self.last_calc['cut_w'], u)} x {UnitUtils.format_dual(self.last_calc['cut_h'], u)}<br><br>"
             f"<b>APERTURE:</b><br>{UnitUtils.format_dual(self.last_calc['img_w'], u)} x {UnitUtils.format_dual(self.last_calc['img_h'], u)}<br><br>"
             f"<b>PRINT SIZE:</b><br>{UnitUtils.format_dual(self.last_calc['print_w'], u)} x {UnitUtils.format_dual(self.last_calc['print_h'], u)}"

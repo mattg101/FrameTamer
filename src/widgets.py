@@ -346,10 +346,8 @@ class CollapsibleBox(QWidget):
         self.content_area.setMaximumHeight(0)
         self.content_area.setMinimumHeight(0)
         
-        self.toggle_animation = QPropertyAnimation(self.content_area, b"maximumHeight")
-        self.toggle_animation.setDuration(300)
-        self.toggle_animation.setStartValue(0)
-        self.toggle_animation.setEndValue(1000) # Arbitrary large value
+        self.content_area = QWidget()
+        # Initial State: Visible
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setSpacing(0)
@@ -361,9 +359,11 @@ class CollapsibleBox(QWidget):
 
     def on_pressed(self):
         checked = not self.toggle_button.isChecked()
+        # No animation, just toggle visibility
         self.toggle_button.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
-        self.toggle_animation.setDirection(QAbstractAnimation.Direction.Forward if checked else QAbstractAnimation.Direction.Backward)
-        self.toggle_animation.start()
+        self.content_area.setVisible(checked)
+        # Force layout update to prevent artifacts
+        if self.parentWidget(): self.parentWidget().adjustSize()
 
     def set_content_layout(self, layout):
         old_layout = self.content_area.layout()
@@ -371,6 +371,4 @@ class CollapsibleBox(QWidget):
             import sip
             sip.delete(old_layout)
         self.content_area.setLayout(layout)
-        collapsed_height = self.sizeHint().height() - self.content_area.maximumHeight()
-        content_height = layout.sizeHint().height()
-        self.toggle_animation.setEndValue(content_height)
+        self.content_area.setLayout(layout)
