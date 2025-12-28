@@ -1,6 +1,7 @@
 import os
 import ssl
 import math
+import json
 from urllib.request import Request, urlopen
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -10,12 +11,13 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QScrollArea, QFrame, QMessageBox, QRadioButton, QInputDialog)
 from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings
 from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, 
-                         QPolygonF, QFont, QImageReader, QPageSize)
+                         QPolygonF, QFont, QImageReader, QPageSize, QAction, QKeySequence, QActionGroup)
 
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
 from .utils import UnitUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox
-from .dialogs import TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, GooglePhotosDialog
+from .dialogs import (TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, 
+                      GooglePhotosDialog, TutorialDialog, AboutDialog)
 
 class FrameApp(QMainWindow):
     def __init__(self):
@@ -33,6 +35,12 @@ class FrameApp(QMainWindow):
         self.unit_inputs = [] 
         self.defaults_mode = False
         
+        self.unit_inputs = [] 
+        self.defaults_mode = False
+        self.current_project_path = None
+        self.current_image_path = None
+        
+        self.setup_menu()
         self.setup_ui()
         self.load_settings()
         self.load_rick_roll()
@@ -81,6 +89,165 @@ class FrameApp(QMainWindow):
         settings.setValue("frame_color", self.frame_color.name())
         settings.setValue("unit", self.unit)
         super().closeEvent(event)
+
+    def setup_menu(self):
+        menubar = self.menuBar()
+        
+        # File Menu
+        file_menu = menubar.addMenu("File")
+        
+        act_new = QAction("New Project", self); act_new.setShortcut("Ctrl+N"); act_new.triggered.connect(self.new_project)
+        act_open = QAction("Open Project...", self); act_open.setShortcut("Ctrl+O"); act_open.triggered.connect(self.open_project)
+        act_save = QAction("Save Project", self); act_save.setShortcut("Ctrl+S"); act_save.triggered.connect(self.save_project)
+        act_save_as = QAction("Save Project As...", self); act_save_as.setShortcut("Ctrl+Shift+S"); act_save_as.triggered.connect(self.save_project_as)
+        act_exit = QAction("Exit", self); act_exit.setShortcut("Ctrl+Q"); act_exit.triggered.connect(self.close)
+        
+        self.menu_recent = file_menu.addMenu("Recent Projects")
+        self.update_recent_menu()
+        
+        file_menu.addAction(act_new)
+        file_menu.addAction(act_open)
+        file_menu.addMenu(self.menu_recent)
+        file_menu.addSeparator()
+        file_menu.addAction(act_save)
+        file_menu.addAction(act_save_as)
+        file_menu.addSeparator()
+        file_menu.addAction(act_exit)
+        
+        # Preferences
+        pref_menu = menubar.addMenu("Preferences")
+        
+        # Workflow Mode
+        mode_menu = pref_menu.addMenu("Workflow Mode")
+        self.act_mode_frame = QAction("Fixed Frame (Fit Art)", self, checkable=True)
+        self.act_mode_art = QAction("Fixed Art (Build Frame)", self, checkable=True)
+        self.act_mode_frame.setChecked(True)
+        
+        grp = QActionGroup(self)
+        grp.addAction(self.act_mode_frame)
+        grp.addAction(self.act_mode_art)
+        
+        self.act_mode_frame.triggered.connect(self.update_ui_visibility)
+        self.act_mode_art.triggered.connect(self.update_ui_visibility)
+        
+        mode_menu.addAction(self.act_mode_frame)
+        mode_menu.addAction(self.act_mode_art)
+        
+        # Alias for backward compatibility
+        self.rb_mode_frame = self.act_mode_frame
+        self.rb_mode_art = self.act_mode_art
+        
+        act_toggle_units = QAction("Toggle Units (In/MM)", self); act_toggle_units.triggered.connect(self.toggle_units_menu)
+        pref_menu.addAction(act_toggle_units)
+
+        # Help
+        help_menu = menubar.addMenu("Help")
+        act_tut = QAction("Tutorial", self); act_tut.triggered.connect(self.open_tutorial)
+        act_about = QAction("About", self); act_about.triggered.connect(self.open_about)
+        help_menu.addAction(act_tut)
+        help_menu.addAction(act_about)
+
+    def new_project(self):
+        self.current_project_path = None
+        self.defaults_mode = True # Suppress updates
+        self.spin_iw.setValue(16.0); self.spin_ih.setValue(20.0)
+        self.spin_face.setValue(0.75); self.spin_rabbet.setValue(0.25); self.spin_print_border.setValue(0.25)
+        self.current_crop = QRectF(0,0,1,1); self.pixmap_full = None; self.frame_texture = None
+        self.editor_cropper.set_image(None); self.editor_mat.set_image(None); self.preview.setPixmap(QPixmap())
+        self.defaults_mode = False; self.recalc()
+        self.setWindowTitle("Pro Frame & Mat Studio v14.0 - New Project")
+
+    def save_project(self):
+        if not self.current_project_path: self.save_project_as()
+        else: self._do_save(self.current_project_path)
+            
+    def save_project_as(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save Project", "", "Frame Files (*.frame)")
+        if path:
+            self.current_project_path = path
+            self._do_save(path)
+            self.add_recent_project(path)
+            self.setWindowTitle(f"Pro Frame & Mat Studio v14.0 - {os.path.basename(path)}")
+
+    def _do_save(self, path):
+        data = {
+            "version": "14.0",
+            "unit": self.unit,
+            "mode": "frame" if self.act_mode_frame.isChecked() else "art",
+            "dimensions": {
+                "aperture_w": self.spin_iw.value(), "aperture_h": self.spin_ih.value(),
+                "face": self.spin_face.value(), "rabbet": self.spin_rabbet.value(), "p_border": self.spin_print_border.value(),
+                "mat": [self.spin_mat_t.value(), self.spin_mat_b.value(), self.spin_mat_l.value(), self.spin_mat_r.value()]
+            },
+            "colors": {"mat": self.mat_color.name(), "frame": self.frame_color.name()},
+            "image_path": self.editor_cropper.params.get('pixmap_source_path', "") # Need to store source path!
+        }
+        # Note: Storing full texture implies serializing pixmap or saving separate files.
+        # For MVP, we skip texture persistence or rely on re-loading image.
+        try:
+            with open(path, 'w') as f: json.dump(data, f, indent=2)
+        except Exception as e: QMessageBox.critical(self, "Save Error", str(e))
+
+    def open_project(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Open Project", "", "Frame Files (*.frame)")
+        if path: self.load_project(path)
+
+    def load_project(self, path):
+        try:
+            with open(path, 'r') as f: data = json.load(f)
+            
+            self.defaults_mode = True
+            if data.get("unit") == "mm": self.rb_met.setChecked(True)
+            else: self.rb_imp.setChecked(True)
+            
+            if data.get("mode") == "art": self.act_mode_art.setChecked(True)
+            else: self.act_mode_frame.setChecked(True)
+            
+            dims = data.get("dimensions", {})
+            self.spin_iw.setValue(dims.get("aperture_w", 16))
+            self.spin_ih.setValue(dims.get("aperture_h", 20))
+            self.spin_face.setValue(dims.get("face", 0.75))
+            
+            cols = data.get("colors", {})
+            if cols.get("mat"): self.mat_color = QColor(cols["mat"])
+            if cols.get("frame"): self.frame_color = QColor(cols["frame"])
+            
+            img_path = data.get("image_path", "")
+            if img_path and os.path.exists(img_path):
+                pm = QPixmap(img_path)
+                if not pm.isNull(): self.set_image(pm, img_path)
+            
+            self.defaults_mode = False; self.recalc()
+            self.current_project_path = path
+            self.add_recent_project(path)
+            self.setWindowTitle(f"Pro Frame & Mat Studio v14.0 - {os.path.basename(path)}")
+        except Exception as e: QMessageBox.critical(self, "Load Error", str(e))
+
+    def add_recent_project(self, path):
+        settings = QSettings("MattG", "FrameTamer")
+        recent = settings.value("recent_projects", [])
+        if path in recent: recent.remove(path)
+        recent.insert(0, path)
+        recent = recent[:5]
+        settings.setValue("recent_projects", recent)
+        self.update_recent_menu()
+
+    def update_recent_menu(self):
+        self.menu_recent.clear()
+        settings = QSettings("MattG", "FrameTamer")
+        recent = settings.value("recent_projects", [])
+        for p in recent:
+            if os.path.exists(p):
+                a = QAction(os.path.basename(p), self)
+                a.triggered.connect(lambda checked, p=p: self.load_project(p))
+                self.menu_recent.addAction(a)
+
+    def toggle_units_menu(self):
+        if self.rb_imp.isChecked(): self.rb_met.setChecked(True)
+        else: self.rb_imp.setChecked(True)
+
+    def open_tutorial(self): TutorialDialog(self).show()
+    def open_about(self): AboutDialog(self).show()
 
     def setup_ui(self):
         central = QWidget(); self.setCentralWidget(central)
@@ -151,13 +318,6 @@ class FrameApp(QMainWindow):
         
         line = QFrame(); line.setFrameShape(QFrame.Shape.HLine); line.setFrameShadow(QFrame.Shadow.Sunken)
         self.c_layout.addWidget(line)
-
-        gb_mode = QGroupBox("Workflow Mode"); l_mode = QVBoxLayout()
-        self.rb_mode_frame = QRadioButton("Fixed Frame (Fit Art)"); self.rb_mode_frame.setChecked(True)
-        self.rb_mode_frame.toggled.connect(self.update_ui_visibility)
-        self.rb_mode_art = QRadioButton("Fixed Art (Build Frame)"); self.rb_mode_art.toggled.connect(self.update_ui_visibility)
-        l_mode.addWidget(self.rb_mode_frame); l_mode.addWidget(self.rb_mode_art)
-        gb_mode.setLayout(l_mode); self.c_layout.addWidget(gb_mode)
 
         h_top = QHBoxLayout()
         btn_import = QPushButton("Import Photo"); btn_import.clicked.connect(self.import_image)
@@ -480,7 +640,7 @@ class FrameApp(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", "Images (*.png *.jpg *.jpeg)")
         if path: 
             pm = QPixmap(path)
-            if not pm.isNull(): self.set_image(pm)
+            if not pm.isNull(): self.set_image(pm, path)
             else: QMessageBox.warning(self, "Error", "Failed to load image.")
 
     def load_from_google_photos(self):
@@ -488,12 +648,13 @@ class FrameApp(QMainWindow):
         if dlg.exec():
             pix = dlg.get_selected_image()
             if pix and not pix.isNull():
-                self.set_image(pix)
+                self.set_image(pix, "") # No local path
             elif pix:
                 QMessageBox.warning(self, "Error", "Failed to load photo from Google.")
 
-    def set_image(self, pixmap):
+    def set_image(self, pixmap, path=None):
         self.pixmap_full = pixmap
+        if path is not None: self.current_image_path = path
         self.editor_cropper.set_image(self.pixmap_full); self.editor_mat.set_image(self.pixmap_full)
         self.current_crop = QRectF(0,0,1,1); self.recalc_aspect()
 
@@ -596,8 +757,9 @@ class FrameApp(QMainWindow):
             'img_w': final_w * to_in, 'img_h': final_h * to_in,
             'print_w': (final_w + 2*p_border)*to_in, 'print_h': (final_h + 2*p_border)*to_in, 'p_border': p_border*to_in,
             'outer_w': ow * to_in, 'outer_h': oh * to_in, 'frame_face': face * to_in, 
-            'pixmap': self.pixmap_full, 'crop_rect': self.current_crop, 'col_mat': self.mat_color, 'col_frame': self.frame_color,
-            'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.rb_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked()
+            'pixmap': self.pixmap_full, 'pixmap_source_path': self.current_image_path,
+            'crop_rect': self.current_crop, 'col_mat': self.mat_color, 'col_frame': self.frame_color,
+            'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.act_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked()
         }
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
         u = self.unit

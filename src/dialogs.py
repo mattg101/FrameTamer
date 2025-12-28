@@ -621,3 +621,27 @@ class GooglePhotosDialog(QDialog):
             except Exception as e:
                 QMessageBox.warning(self, "Download Error", f"Could not download full image: {e}")
         return None
+
+class TutorialDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("FrameTamer Tutorial")
+        self.resize(600, 400)
+        layout = QVBoxLayout(self)
+        lbl = QLabel("<h3>Tutorial Coming Soon</h3><p>This feature is under construction.</p>")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl)
+        btn = QPushButton("Close"); btn.clicked.connect(self.accept)
+        layout.addWidget(btn)
+
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("About FrameTamer")
+        self.resize(300, 200)
+        layout = QVBoxLayout(self)
+        lbl = QLabel("<h2>FrameTamer v14.0</h2><p>Pro Frame & Mat Studio</p><p>Created by Antigravity</p>")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(lbl)
+        btn = QPushButton("Close"); btn.clicked.connect(self.accept)
+        layout.addWidget(btn)
