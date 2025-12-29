@@ -337,10 +337,20 @@ class CollapsibleBox(QWidget):
         super().__init__(parent)
 
         self.toggle_button = QToolButton(text=title, checkable=True, checked=True)
-        self.toggle_button.setStyleSheet("QToolButton { border: none; font-weight: bold; background-color: #333; padding: 5px; }")
+        self.toggle_button.setStyleSheet("""
+            QToolButton { 
+                border: none; 
+                font-weight: bold; 
+                background-color: #333; 
+                padding: 5px; 
+                text-align: left;
+            }
+            QToolButton:hover { background-color: #444; }
+        """)
+        self.toggle_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.toggle_button.setArrowType(Qt.ArrowType.DownArrow)
-        self.toggle_button.pressed.connect(self.on_pressed)
+        self.toggle_button.clicked.connect(self.on_pressed)
 
         self.content_area = QWidget()
         self.content_area.setMaximumHeight(0)
@@ -391,51 +401,53 @@ class MetricCard(QFrame):
             QLabel.primary { font-size: 18px; font-weight: bold; color: #4facfe; }
             QLabel.label { color: #888; font-weight: bold; }
         """)
-        self.setMinimumWidth(320)
-        self.setMaximumWidth(330)
+        self.setMinimumWidth(300)
+        self.setMaximumWidth(310)
         
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
         
-        self.lbl_title = QLabel(title)
-        self.lbl_title.setProperty("class", "title")
-        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_title = QLabel(title.upper())
+        self.lbl_title.setStyleSheet("font-size: 10px; font-weight: bold; color: #777; letter-spacing: 1px;")
         layout.addWidget(self.lbl_title)
         
         self.lbl_primary = QLabel("-- x --")
         self.lbl_primary.setWordWrap(True)
         self.lbl_primary.setProperty("class", "primary")
-        self.lbl_primary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_primary.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self.lbl_primary)
         
-        # Details Grid
-        self.grid_details = QGridLayout()
-        self.grid_details.setSpacing(4)
+        # Section 1: Components
+        layout.addWidget(self._create_divider())
+        lbl_comp = QLabel("COMPONENT SPECS")
+        lbl_comp.setStyleSheet("font-size: 9px; font-weight: bold; color: #666;")
+        layout.addWidget(lbl_comp)
         
-        # Row 1: Cut Size | Aperture
-        self.grid_details.addWidget(QLabel("Cut:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        self.lbl_cut = QLabel("--"); self.lbl_cut.setWordWrap(True); self.grid_details.addWidget(self.lbl_cut, 0, 1)
+        self.lbl_cut = QLabel("Cut: --")
+        self.lbl_aperture = QLabel("Aper: --")
+        for lbl in [self.lbl_cut, self.lbl_aperture]:
+            lbl.setStyleSheet("color: #bbb; font-size: 11px;")
+            layout.addWidget(lbl)
+            
+        # Section 2: Output Details
+        layout.addWidget(self._create_divider())
+        lbl_out = QLabel("OUTPUT DETAILS")
+        lbl_out.setStyleSheet("font-size: 9px; font-weight: bold; color: #666;")
+        layout.addWidget(lbl_out)
         
-        self.grid_details.addWidget(QLabel("Aper:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.lbl_aperture = QLabel("--"); self.lbl_aperture.setWordWrap(True); self.grid_details.addWidget(self.lbl_aperture, 0, 3)
-        
-        # Row 2: Print Size
-        self.grid_details.addWidget(QLabel("Print:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.lbl_print = QLabel("--"); self.lbl_print.setWordWrap(True); self.grid_details.addWidget(self.lbl_print, 1, 1, 1, 3)
-        
-        # Row 3: Mat Borders
-        self.grid_details.addWidget(QLabel("Mat T/B:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.lbl_mat_tb = QLabel("--"); self.lbl_mat_tb.setWordWrap(True); self.grid_details.addWidget(self.lbl_mat_tb, 2, 1)
-        
-        self.grid_details.addWidget(QLabel("Mat L/R:"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.lbl_mat_lr = QLabel("--"); self.lbl_mat_lr.setWordWrap(True); self.grid_details.addWidget(self.lbl_mat_lr, 2, 3)
-        
-        # Enable word wrap for all grid children
-        for i in range(self.grid_details.count()):
-            widget = self.grid_details.itemAt(i).widget()
-            if isinstance(widget, QLabel): widget.setWordWrap(True)
+        self.lbl_print = QLabel("Print: --")
+        self.lbl_mat_tb = QLabel("Mat T/B: --")
+        self.lbl_mat_lr = QLabel("Mat L/R: --")
+        for lbl in [self.lbl_print, self.lbl_mat_tb, self.lbl_mat_lr]:
+            lbl.setStyleSheet("color: #bbb; font-size: 11px;")
+            layout.addWidget(lbl)
 
-        layout.addLayout(self.grid_details)
+    def _create_divider(self):
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Plain)
+        line.setStyleSheet("background-color: #3d3d3d; max-height: 1px; border: none;")
+        return line
 
     def update_metrics(self, data):
         # data = {outer_w, outer_h, cut_w, cut_h, img_w, img_h, print_w, print_h, mat_t, mat_b, mat_l, mat_r, unit, no_mat}
@@ -445,24 +457,19 @@ class MetricCard(QFrame):
         self.lbl_primary.setText(f"{UnitUtils.format_dual(ow, u)} x {UnitUtils.format_dual(oh, u)}")
         
         cw, ch = data.get('cut_w', 0), data.get('cut_h', 0)
-        self.lbl_cut.setText(f"{UnitUtils.format_dual(cw, u)} x {UnitUtils.format_dual(ch, u)}")
+        self.lbl_cut.setText(f"Cut: {UnitUtils.format_dual(cw, u)} x {UnitUtils.format_dual(ch, u)}")
         
         iw, ih = data.get('img_w', 0), data.get('img_h', 0)
-        self.lbl_aperture.setText(f"{UnitUtils.format_dual(iw, u)} x {UnitUtils.format_dual(ih, u)}")
+        self.lbl_aperture.setText(f"Aper: {UnitUtils.format_dual(iw, u)} x {UnitUtils.format_dual(ih, u)}")
         
         pw, ph = data.get('print_w', 0), data.get('print_h', 0)
-        self.lbl_print.setText(f"{UnitUtils.format_dual(pw, u)} x {UnitUtils.format_dual(ph, u)}")
+        self.lbl_print.setText(f"Print: {UnitUtils.format_dual(pw, u)} x {UnitUtils.format_dual(ph, u)}")
         
         if data.get('no_mat', False):
-            self.lbl_mat_tb.setText("N/A")
-            self.lbl_mat_lr.setText("N/A")
+            self.lbl_mat_tb.setText("Mat T/B: N/A")
+            self.lbl_mat_lr.setText("Mat L/R: N/A")
         else:
-            # Convert mat dimensions to inch for display normalization if needed, 
-            # but usually they are passed as raw floats.
-            # Assuming data passed in is already in inches, except for the unit flag.
-            
             mt, mb = data.get('mat_t', 0), data.get('mat_b', 0)
             ml, mr = data.get('mat_l', 0), data.get('mat_r', 0)
-            
-            self.lbl_mat_tb.setText(f"{UnitUtils.format_dual(mt, u)} / {UnitUtils.format_dual(mb, u)}")
-            self.lbl_mat_lr.setText(f"{UnitUtils.format_dual(ml, u)} / {UnitUtils.format_dual(mr, u)}")
+            self.lbl_mat_tb.setText(f"Mat T/B: {UnitUtils.format_dual(mt, u)} / {UnitUtils.format_dual(mb, u)}")
+            self.lbl_mat_lr.setText(f"Mat L/R: {UnitUtils.format_dual(ml, u)} / {UnitUtils.format_dual(mr, u)}")

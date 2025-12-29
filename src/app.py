@@ -272,6 +272,7 @@ class FrameApp(QMainWindow):
         main_v_layout.addLayout(workspace_layout)
 
         panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(360)
+        panel_layout.setContentsMargins(10, 10, 10, 10)
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         scroll_area.setFixedWidth(340) 
         
@@ -327,11 +328,13 @@ class FrameApp(QMainWindow):
         h_import.addWidget(btn_import); h_import.addWidget(btn_google)
         l_media.addLayout(h_import)
         
-        h_tex = QHBoxLayout()
-        self.btn_extract_tex = QPushButton("Extract Texture"); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
-        self.btn_lib_tex = QPushButton("Texture Library"); self.btn_lib_tex.clicked.connect(self.select_from_library)
-        h_tex.addWidget(self.btn_extract_tex); h_tex.addWidget(self.btn_lib_tex)
-        l_media.addLayout(h_tex)
+        v_tex = QVBoxLayout(); v_tex.setSpacing(4)
+        self.btn_extract_tex = QPushButton("Extract Frame Texture"); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
+        self.btn_lib_tex = QPushButton("Frame Texture Library"); self.btn_lib_tex.clicked.connect(self.select_from_library)
+        # User requested library at "bottom left", so stack it second in vertical or first?
+        # Stacked: Extract then Library (Library is below)
+        v_tex.addWidget(self.btn_extract_tex); v_tex.addWidget(self.btn_lib_tex)
+        l_media.addLayout(v_tex)
         
         self.group_media.set_content_layout(l_media)
         self.c_layout.addWidget(self.group_media)
