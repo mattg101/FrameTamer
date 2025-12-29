@@ -388,9 +388,11 @@ class MetricCard(QFrame):
             }
             QLabel { color: #ddd; font-size: 11px; }
             QLabel.title { font-size: 14px; font-weight: bold; color: #aaa; }
-            QLabel.primary { font-size: 24px; font-weight: bold; color: #4facfe; }
+            QLabel.primary { font-size: 18px; font-weight: bold; color: #4facfe; }
             QLabel.label { color: #888; font-weight: bold; }
         """)
+        self.setMinimumWidth(320)
+        self.setMaximumWidth(330)
         
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
@@ -411,23 +413,28 @@ class MetricCard(QFrame):
         self.grid_details.setSpacing(4)
         
         # Row 1: Cut Size | Aperture
-        self.grid_details.addWidget(QLabel("Cut Size:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        self.lbl_cut = QLabel("--"); self.grid_details.addWidget(self.lbl_cut, 0, 1)
+        self.grid_details.addWidget(QLabel("Cut:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        self.lbl_cut = QLabel("--"); self.lbl_cut.setWordWrap(True); self.grid_details.addWidget(self.lbl_cut, 0, 1)
         
-        self.grid_details.addWidget(QLabel("Aperture:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.lbl_aperture = QLabel("--"); self.grid_details.addWidget(self.lbl_aperture, 0, 3)
+        self.grid_details.addWidget(QLabel("Aper:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.lbl_aperture = QLabel("--"); self.lbl_aperture.setWordWrap(True); self.grid_details.addWidget(self.lbl_aperture, 0, 3)
         
         # Row 2: Print Size
-        self.grid_details.addWidget(QLabel("Print Size:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.lbl_print = QLabel("--"); self.grid_details.addWidget(self.lbl_print, 1, 1, 1, 3)
+        self.grid_details.addWidget(QLabel("Print:"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        self.lbl_print = QLabel("--"); self.lbl_print.setWordWrap(True); self.grid_details.addWidget(self.lbl_print, 1, 1, 1, 3)
         
         # Row 3: Mat Borders
         self.grid_details.addWidget(QLabel("Mat T/B:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.lbl_mat_tb = QLabel("--"); self.grid_details.addWidget(self.lbl_mat_tb, 2, 1)
+        self.lbl_mat_tb = QLabel("--"); self.lbl_mat_tb.setWordWrap(True); self.grid_details.addWidget(self.lbl_mat_tb, 2, 1)
         
         self.grid_details.addWidget(QLabel("Mat L/R:"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.lbl_mat_lr = QLabel("--"); self.grid_details.addWidget(self.lbl_mat_lr, 2, 3)
+        self.lbl_mat_lr = QLabel("--"); self.lbl_mat_lr.setWordWrap(True); self.grid_details.addWidget(self.lbl_mat_lr, 2, 3)
         
+        # Enable word wrap for all grid children
+        for i in range(self.grid_details.count()):
+            widget = self.grid_details.itemAt(i).widget()
+            if isinstance(widget, QLabel): widget.setWordWrap(True)
+
         layout.addLayout(self.grid_details)
 
     def update_metrics(self, data):

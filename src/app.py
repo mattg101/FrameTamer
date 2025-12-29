@@ -271,9 +271,9 @@ class FrameApp(QMainWindow):
         workspace_layout = QHBoxLayout(); workspace_layout.setSpacing(15)
         main_v_layout.addLayout(workspace_layout)
 
-        panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(400)
+        panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(360)
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        scroll_area.setFixedWidth(370) 
+        scroll_area.setFixedWidth(340) 
         
         self.controls = QWidget()
         self.c_layout = QVBoxLayout(self.controls); self.c_layout.setSpacing(6); self.c_layout.setContentsMargins(5, 5, 5, 5)
