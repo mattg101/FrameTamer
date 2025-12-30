@@ -41,6 +41,8 @@ class FrameApp(QMainWindow):
         self.current_image_path = None
         
         self.setup_menu()
+        # Show tutorial if needed
+        TutorialDialog.show_if_needed(self)
         self.setup_ui()
         self.load_settings()
         self.load_rick_roll()
@@ -149,9 +151,12 @@ class FrameApp(QMainWindow):
 
         # Help
         help_menu = menubar.addMenu("Help")
-        act_tut = QAction("Tutorial", self); act_tut.triggered.connect(self.open_tutorial)
-        act_about = QAction("About", self); act_about.triggered.connect(self.open_about)
-        help_menu.addAction(act_tut)
+        act_tutorial = QAction("Show Tutorial", self)
+        act_tutorial.triggered.connect(lambda: TutorialDialog(self).exec())
+        help_menu.addAction(act_tutorial)
+        
+        act_about = QAction("About", self)
+        act_about.triggered.connect(lambda: AboutDialog(self).exec())
         help_menu.addAction(act_about)
 
     def new_project(self):

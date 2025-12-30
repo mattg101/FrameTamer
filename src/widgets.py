@@ -393,83 +393,80 @@ class MetricCard(QFrame):
                 background-color: #2b2b2b;
                 border: 1px solid #444;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 12px;
                 margin-top: 10px;
             }
             QLabel { color: #ddd; font-size: 11px; }
-            QLabel.title { font-size: 14px; font-weight: bold; color: #aaa; }
-            QLabel.primary { font-size: 18px; font-weight: bold; color: #4facfe; }
-            QLabel.label { color: #888; font-weight: bold; }
+            QLabel.header { font-size: 12px; font-weight: bold; color: #ffffff; margin-top: 4px; }
+            QLabel.primary { font-size: 20px; font-weight: bold; color: #ffffff; }
         """)
         self.setMinimumWidth(300)
         self.setMaximumWidth(310)
         
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
+        layout.setSpacing(6)
         
-        self.lbl_title = QLabel(title.upper())
-        self.lbl_title.setStyleSheet("font-size: 10px; font-weight: bold; color: #777; letter-spacing: 1px;")
-        layout.addWidget(self.lbl_title)
+        # Section 1: Final Frame Dimension
+        self.lbl_head_final = QLabel("FINAL FRAME DIMENSION")
+        self.lbl_head_final.setProperty("class", "header")
+        layout.addWidget(self.lbl_head_final)
         
         self.lbl_primary = QLabel("-- x --")
         self.lbl_primary.setWordWrap(True)
         self.lbl_primary.setProperty("class", "primary")
-        self.lbl_primary.setAlignment(Qt.AlignmentFlag.AlignLeft)
         layout.addWidget(self.lbl_primary)
         
-        # Section 1: Components
         layout.addWidget(self._create_divider())
-        lbl_comp = QLabel("COMPONENT SPECS")
-        lbl_comp.setStyleSheet("font-size: 9px; font-weight: bold; color: #666;")
-        layout.addWidget(lbl_comp)
+
+        # Section 2: Mat Specs
+        self.lbl_head_mat = QLabel("MAT SPECS")
+        self.lbl_head_mat.setProperty("class", "header")
+        layout.addWidget(self.lbl_head_mat)
         
-        self.lbl_cut = QLabel("Cut: --")
-        self.lbl_aperture = QLabel("Aper: --")
-        for lbl in [self.lbl_cut, self.lbl_aperture]:
-            lbl.setStyleSheet("color: #bbb; font-size: 11px;")
+        self.lbl_cut = QLabel("")
+        self.lbl_aperture = QLabel("")
+        self.lbl_mat_tb = QLabel("")
+        self.lbl_mat_lr = QLabel("")
+        for lbl in [self.lbl_cut, self.lbl_aperture, self.lbl_mat_tb, self.lbl_mat_lr]:
             layout.addWidget(lbl)
             
-        # Section 2: Output Details
         layout.addWidget(self._create_divider())
-        lbl_out = QLabel("OUTPUT DETAILS")
-        lbl_out.setStyleSheet("font-size: 9px; font-weight: bold; color: #666;")
-        layout.addWidget(lbl_out)
+
+        # Section 3: Image Spec
+        self.lbl_head_img = QLabel("IMAGE SPEC")
+        self.lbl_head_img.setProperty("class", "header")
+        layout.addWidget(self.lbl_head_img)
         
-        self.lbl_print = QLabel("Print: --")
-        self.lbl_mat_tb = QLabel("Mat T/B: --")
-        self.lbl_mat_lr = QLabel("Mat L/R: --")
-        for lbl in [self.lbl_print, self.lbl_mat_tb, self.lbl_mat_lr]:
-            lbl.setStyleSheet("color: #bbb; font-size: 11px;")
-            layout.addWidget(lbl)
+        self.lbl_print = QLabel("")
+        layout.addWidget(self.lbl_print)
 
     def _create_divider(self):
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Plain)
-        line.setStyleSheet("background-color: #3d3d3d; max-height: 1px; border: none;")
+        line.setStyleSheet("background-color: #555; max-height: 1px; border: none; margin: 4px 0px;")
         return line
 
     def update_metrics(self, data):
-        # data = {outer_w, outer_h, cut_w, cut_h, img_w, img_h, print_w, print_h, mat_t, mat_b, mat_l, mat_r, unit, no_mat}
         u = data.get('unit', 'in')
         
         ow, oh = data.get('outer_w', 0), data.get('outer_h', 0)
         self.lbl_primary.setText(f"{UnitUtils.format_dual(ow, u)} x {UnitUtils.format_dual(oh, u)}")
         
         cw, ch = data.get('cut_w', 0), data.get('cut_h', 0)
-        self.lbl_cut.setText(f"Cut: {UnitUtils.format_dual(cw, u)} x {UnitUtils.format_dual(ch, u)}")
+        self.lbl_cut.setText(f"<b>Cut Size:</b> {UnitUtils.format_dual(cw, u)} x {UnitUtils.format_dual(ch, u)}")
         
         iw, ih = data.get('img_w', 0), data.get('img_h', 0)
-        self.lbl_aperture.setText(f"Aper: {UnitUtils.format_dual(iw, u)} x {UnitUtils.format_dual(ih, u)}")
-        
-        pw, ph = data.get('print_w', 0), data.get('print_h', 0)
-        self.lbl_print.setText(f"Print: {UnitUtils.format_dual(pw, u)} x {UnitUtils.format_dual(ph, u)}")
+        self.lbl_aperture.setText(f"<b>Aperture:</b> {UnitUtils.format_dual(iw, u)} x {UnitUtils.format_dual(ih, u)}")
         
         if data.get('no_mat', False):
-            self.lbl_mat_tb.setText("Mat T/B: N/A")
-            self.lbl_mat_lr.setText("Mat L/R: N/A")
+            self.lbl_mat_tb.setText("<b>Mat Specs:</b> None (Direct to Frame)")
+            self.lbl_mat_lr.setText("")
         else:
             mt, mb = data.get('mat_t', 0), data.get('mat_b', 0)
             ml, mr = data.get('mat_l', 0), data.get('mat_r', 0)
-            self.lbl_mat_tb.setText(f"Mat T/B: {UnitUtils.format_dual(mt, u)} / {UnitUtils.format_dual(mb, u)}")
-            self.lbl_mat_lr.setText(f"Mat L/R: {UnitUtils.format_dual(ml, u)} / {UnitUtils.format_dual(mr, u)}")
+            self.lbl_mat_tb.setText(f"<b>T/B Border:</b> {UnitUtils.format_dual(mt, u)} / {UnitUtils.format_dual(mb, u)}")
+            self.lbl_mat_lr.setText(f"<b>L/R Border:</b> {UnitUtils.format_dual(ml, u)} / {UnitUtils.format_dual(mr, u)}")
+
+        pw, ph = data.get('print_w', 0), data.get('print_h', 0)
+        self.lbl_print.setText(f"<b>Print Size:</b> {UnitUtils.format_dual(pw, u)} x {UnitUtils.format_dual(ph, u)}")
