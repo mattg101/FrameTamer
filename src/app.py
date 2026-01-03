@@ -15,7 +15,7 @@ from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter,
                          QPolygonF, QFont, QImageReader, QPageSize, QAction, QKeySequence, QActionGroup)
 
 from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
-from .utils import UnitUtils
+from .utils import UnitUtils, ColorUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox, MetricCard
 from .dialogs import (TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, 
                       GooglePhotosDialog, TutorialDialog, AboutDialog)
@@ -60,10 +60,10 @@ class FrameApp(QMainWindow):
         self.spin_print_border.setValue(float(settings.value("print_border", 0.25)))
         
         # Load colors
-        mat_col = settings.value("mat_color")
-        if mat_col: self.mat_color = QColor(mat_col)
-        frame_col = settings.value("frame_color")
-        if frame_col: self.frame_color = QColor(frame_col)
+        mat_col = settings.value("mat_color", DEFAULT_MAT_COLOR.name())
+        self.mat_color = QColor(mat_col)
+        frame_col = settings.value("frame_color", DEFAULT_FRAME_COLOR.name())
+        self.frame_color = QColor(frame_col)
         
         # Load units
         self.unit = settings.value("unit", "in")
@@ -853,7 +853,7 @@ class FrameApp(QMainWindow):
             'pixmap': self.pixmap_full, 'pixmap_source_path': self.current_image_path,
             'crop_rect': self.current_crop, 'col_mat': self.mat_color, 'col_frame': self.frame_color,
             'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.act_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked(),
-            'mat_name': "Cotton White",
+            'mat_name': ColorUtils.get_closest_name(self.mat_color),
             'mat_ply': f"{ply} ({thick_str})" if thick_str != "Custom" else ply
         }
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
@@ -931,14 +931,14 @@ class FrameApp(QMainWindow):
             if label == "MAT COLOR":
                 fm = painter.fontMetrics()
                 text_w = fm.horizontalAdvance(val)
-                swatch_size = 120
-                swatch_x = 150 + col1_w + text_w + 100
-                swatch_y = int(y + h*0.7 - swatch_size)
+                sw_w, sw_h = 480, 150
+                sw_x = 150 + col1_w + text_w + 100
+                sw_y = int(y + h*0.7 - sw_h)
                 
                 # Draw swatch
                 painter.setPen(QPen(Qt.GlobalColor.black, 2))
                 painter.setBrush(d.get('col_mat', Qt.GlobalColor.white))
-                painter.drawRect(swatch_x, swatch_y, swatch_size, swatch_size)
+                painter.drawRect(sw_x, sw_y, sw_w, sw_h)
                 painter.setBrush(Qt.BrushStyle.NoBrush) # Reset brush
             
             y += h

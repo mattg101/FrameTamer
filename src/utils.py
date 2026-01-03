@@ -48,3 +48,47 @@ def draw_physical_grid(painter, rect, px_per_inch, unit_mode, w_px, h_px):
             pos += step_px; count += 1
     draw_lines(w_px, True); draw_lines(h_px, False)
     painter.restore()
+
+class ColorUtils:
+    COMMON_COLORS = {
+        "Cotton White": (251, 251, 249),
+        "Bright White": (255, 255, 255),
+        "Off-White": (245, 245, 240),
+        "Cream": (255, 253, 208),
+        "Grey": (128, 128, 128),
+        "Black": (0, 0, 0),
+        "Navy": (0, 0, 128),
+        "Royal Blue": (65, 105, 225),
+        "Sky Blue": (135, 206, 235),
+        "Forest Green": (34, 139, 34),
+        "Sage Green": (156, 175, 136),
+        "Lime Green": (85, 255, 0),
+        "Deep Red": (139, 0, 0),
+        "Burgundy": (128, 0, 32),
+        "Tan": (210, 180, 140),
+        "Chocolate": (105, 75, 55),
+        "Gold": (212, 175, 55),
+        "Silver": (192, 192, 192),
+        "Orange": (255, 165, 0),
+        "Purple": (128, 0, 128),
+        "Teal": (0, 128, 128),
+        "Hot Pink": (255, 105, 180),
+    }
+
+    @staticmethod
+    def get_closest_name(qcolor):
+        r1, g1, b1 = qcolor.red(), qcolor.green(), qcolor.blue()
+        best_match = "Custom"
+        min_dist = float('inf')
+        
+        for name, (r2, g2, b2) in ColorUtils.COMMON_COLORS.items():
+            dist = math.sqrt((r1 - r2)**2 + (g1 - g2)**2 + (b1 - b2)**2)
+            if dist < min_dist:
+                min_dist = dist
+                best_match = name
+        
+        # Threshold for a "good" match
+        if min_dist < 60:
+            if min_dist < 5: return best_match
+            return f"{best_match} (~{qcolor.name().upper()})"
+        return f"Custom ({qcolor.name().upper()})"
