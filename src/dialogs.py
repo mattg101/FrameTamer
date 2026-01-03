@@ -663,39 +663,39 @@ class TutorialDialog(QDialog):
         self.setFixedSize(600, 550)
         self.setStyleSheet("background-color: #2b2b2b; color: #ddd;")
         
-        # In this dev environment, assets are in the artifacts dir
-        art_dir = "C:/Users/mattg/.gemini/antigravity/brain/3e4c7fee-f5d7-40ff-9557-63e5e836b35a/"
+        # Use project-relative paths for images
+        base_dir = os.path.join(os.getcwd(), "docs/wiki/images/")
         
         self.steps_data = [
             {
                 "title": "Welcome to FrameTamer",
                 "desc": "FrameTamer is a professional utility for designers and makers to precisely calculate frame dimensions, mat borders, and output specifications. Let's take a quick look at the features.",
-                "img": art_dir + "tutorial_welcome_1767113457984.png"
+                "img": base_dir + "step_1_welcome.png"
             },
             {
                 "title": "1. Load Your Media",
                 "desc": "Import your photos directly or browse your Google Photos library. You can also extract frame textures from existing photos to see exactly how your art will look in a real frame.",
-                "img": art_dir + "tutorial_source_fixed_1767113559744.png"
+                "img": base_dir + "step_2_media.png"
             },
             {
                 "title": "2. Define Dimensions",
                 "desc": "Enter the precise Aperture (the visible opening) and the Frame Profile. We track the 'Face Width' and 'Rabbet Depth' to ensure every calculation is millimetre-perfect.",
-                "img": art_dir + "tutorial_dimensions_fixed_1767113592783.png"
+                "img": base_dir + "step_3_dimensions.png"
             },
             {
                 "title": "3. Master Matting",
                 "desc": "Choose between 'Float' or 'Overmat' mounting. FrameTamer automatically calculates the necessary mat board cuts and hardware requirements based on your choices.",
-                "img": art_dir + "tutorial_matting_fixed_1767113624330.png"
+                "img": base_dir + "step_4_matting.png"
             },
             {
                 "title": "4. Visual Polish",
                 "desc": "Customize the frame and mat colors to match your vision. Our visualization engine renders realistic shadows and textures for an accurate preview.",
-                "img": art_dir + "tutorial_appearance_fixed_1767113649110.png"
+                "img": base_dir + "step_5_appearance.png"
             },
             {
                 "title": "5. Real-time Results",
                 "desc": "The MetricCard provides a live-updated list of all final dimensions. When you're ready, export a high-res PDF blueprint or a JPEG for client approval.",
-                "img": art_dir + "tutorial_metrics_1767113502630.png"
+                "img": base_dir + "step_6_metrics.png"
             }
         ]
         

@@ -2,6 +2,7 @@ import os
 import ssl
 import math
 import json
+from datetime import datetime
 from urllib.request import Request, urlopen
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -441,7 +442,68 @@ class FrameApp(QMainWindow):
         self.c_layout.addStretch()
 
     def export_jpg(self):
-        QMessageBox.information(self, "Coming Soon", "JPG Export with custom DPI is under development.")
+        if not self.last_calc:
+            QMessageBox.warning(self, "No Project", "Please perform a calculation first.")
+            return
+        if not self.pixmap_full:
+            QMessageBox.warning(self, "No Image", "Please load an image to export.")
+            return
+
+        d = self.last_calc
+        dpi = int(self.combo_dpi.currentText())
+        
+        # Generate descriptive filename
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        size_str = f"{d['print_w']:.1f}x{d['print_h']:.1f}"
+        default_fn = f"Print_Ready_Art_{size_str}_{ts}.jpg"
+
+        fn, _ = QFileDialog.getSaveFileName(self, "Save for Print (JPG)", default_fn, "JPEG Files (*.jpg)")
+        if not fn: return
+
+        # Calculate target pixel dimensions
+        # d['print_w'] and d['print_h'] are already in inches
+        w_px = int(d['print_w'] * dpi)
+        h_px = int(d['print_h'] * dpi)
+        
+        print(f"Exporting for print: {d['print_w']}\" x {d['print_h']}\" @ {dpi} DPI ({w_px}x{h_px} px)")
+
+        # Get the source image and crop it
+        # self.current_crop is a QRectF in normalized coordinates (0-1)
+        src_pixmap = self.pixmap_full
+        src_w, src_h = src_pixmap.width(), src_pixmap.height()
+        
+        crop_rect = d['crop_rect']
+        real_crop = QRectF(
+            crop_rect.x() * src_w,
+            crop_rect.y() * src_h,
+            crop_rect.width() * src_w,
+            crop_rect.height() * src_h
+        ).toRect()
+        
+        cropped_img = src_pixmap.copy(real_crop).toImage()
+        
+        # Scale to print size
+        # We want to fill the target dimensions. Since the aspect ratio of print_w/print_h
+        # should match the crop aspect ratio (if recalc did its job), we just scale.
+        final_img = cropped_img.scaled(w_px, h_px, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+        
+        # If there's a minor discrepancy, center-crop to exact pixels
+        if final_img.width() != w_px or final_img.height() != h_px:
+            final_img = final_img.copy(
+                (final_img.width() - w_px) // 2,
+                (final_img.height() - h_px) // 2,
+                w_px, h_px
+            )
+
+        # Set DPI metadata (dots per meter)
+        dpm = int(dpi / 0.0254)
+        final_img.setDotsPerMeterX(dpm)
+        final_img.setDotsPerMeterY(dpm)
+
+        if final_img.save(fn, "JPG", 95):
+            QMessageBox.information(self, "Export Complete", f"Print-ready image saved to:\n{fn}\n\nDimensions: {w_px} x {h_px} pixels")
+        else:
+            QMessageBox.critical(self, "Export Failed", "Could not save JPEG file.")
 
     def _create_spin(self, val):
         s = QDoubleSpinBox(); s.setRange(0, 99999); s.setDecimals(3); s.setValue(val); 
@@ -827,9 +889,12 @@ class FrameApp(QMainWindow):
         painter.drawText(100, 150, "MAT BLUEPRINT [TECHNICAL]")
         font.setPointSize(10); font.setBold(False); painter.setFont(font)
         y = 300; h = 160
-        for l in [f"CUT SIZE: {UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}",
-                  f"APERTURE: {UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}",
-                  f"PRINT SIZE: {UnitUtils.format_dual(d['print_w'], u)} x {UnitUtils.format_dual(d['print_h'], u)}"]:
+        summary_lines = [
+            f"MAT CUT SIZE: {UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}",
+            f"APERTURE SIZE: {UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}",
+            f"MAT BORDERS: Top: {UnitUtils.format_dual(d['phys_top'], u)}, Bottom: {UnitUtils.format_dual(d['phys_bot'], u)}, Left: {UnitUtils.format_dual(d['phys_left'], u)}, Right: {UnitUtils.format_dual(d['phys_right'], u)}"
+        ]
+        for l in summary_lines:
             painter.drawText(100, int(y), l); y += h
         
         avail_w, avail_h = writer.width(), writer.height() - y - 2000
@@ -838,8 +903,26 @@ class FrameApp(QMainWindow):
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
         painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
         painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax+d['img_w']*scale, ay), f"Top: {UnitUtils.format_dual(d['phys_top'], u)}", -500, False)
-        self.draw_dimension(painter, QPointF(ax, ay), QPointF(ax, ay+d['img_h']*scale), f"Left: {UnitUtils.format_dual(d['phys_left'], u)}", -500, True)
+        
+        # Annotate borders directly in margins
+        font.setPointSize(8); painter.setFont(font); painter.setPen(Qt.GlobalColor.black)
+        
+        def draw_label(rect, val):
+            text = f"{val:.3f}\"" if u == "in" else f"{val*25.4:.1f}mm"
+            fm = painter.fontMetrics()
+            rect_text = fm.boundingRect(text)
+            # If margin fits text with 1.5x padding
+            if rect.width() > rect_text.width() * 1.5 and rect.height() > rect_text.height() * 1.5:
+                painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
+
+        # Top
+        draw_label(QRectF(ox, oy, d['cut_w']*scale, d['phys_top']*scale), d['phys_top'])
+        # Bottom
+        draw_label(QRectF(ox, ay + d['img_h']*scale, d['cut_w']*scale, d['phys_bot']*scale), d['phys_bot'])
+        # Left
+        draw_label(QRectF(ox, oy, d['phys_left']*scale, d['cut_h']*scale), d['phys_left'])
+        # Right
+        draw_label(QRectF(ax + d['img_w']*scale, oy, d['phys_right']*scale, d['cut_h']*scale), d['phys_right'])
 
         # Page 2: Final Preview
         writer.newPage()
