@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QFileDialog, QColorDialog,
                              QGroupBox, QGridLayout, QDoubleSpinBox, QComboBox, QCheckBox, 
                              QSizePolicy, QFormLayout, QButtonGroup, QStackedWidget, 
-                             QScrollArea, QFrame, QMessageBox, QRadioButton, QInputDialog)
+                             QScrollArea, QFrame, QMessageBox, QRadioButton, QInputDialog, QLineEdit)
 from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings
 from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, 
                          QPolygonF, QFont, QImageReader, QPageSize, QAction, QKeySequence, QActionGroup)
@@ -428,6 +428,16 @@ class FrameApp(QMainWindow):
         b_fc = QPushButton("Frame Color"); b_fc.clicked.connect(self.pick_frame)
         h_col.addWidget(b_mc); h_col.addWidget(b_fc)
         l_app.addLayout(h_col)
+
+        l_mat_info = QFormLayout()
+        self.combo_mat_ply = QComboBox()
+        self.combo_mat_ply.addItems(["4-ply", "8-ply", "Overlap (Custom)"])
+        self.combo_mat_ply.currentIndexChanged.connect(self.recalc)
+        self.lbl_mat_thick = QLabel("Thickness: 1/16\"")
+        l_mat_info.addRow("Mat Ply:", self.combo_mat_ply)
+        l_mat_info.addRow("", self.lbl_mat_thick)
+        l_app.addLayout(l_mat_info)
+
         self.group_app.set_content_layout(l_app)
         self.c_layout.addWidget(self.group_app)
 
@@ -825,6 +835,14 @@ class FrameApp(QMainWindow):
             ow, oh = glass_w + 2*(face-rabbet), glass_h + 2*(face-rabbet)
 
         hidden = rabbet - (tol/2.0)
+        # Mat Thickness Logic
+        ply = self.combo_mat_ply.currentText()
+        thick_str = "N/A"
+        if ply == "4-ply": thick_str = "1/16\""
+        elif ply == "8-ply": thick_str = "1/8\""
+        elif ply == "Overlap (Custom)": thick_str = "Custom"
+        self.lbl_mat_thick.setText(f"Thickness: {thick_str}")
+
         self.last_calc = {
             'unit': self.unit, 'cut_w': mat_cut_w * to_in, 'cut_h': mat_cut_h * to_in,
             'mat_top': fmt * to_in, 'mat_bottom': fmb * to_in, 'mat_left': fml * to_in, 'mat_right': fmr * to_in,
@@ -834,7 +852,9 @@ class FrameApp(QMainWindow):
             'outer_w': ow * to_in, 'outer_h': oh * to_in, 'frame_face': face * to_in, 
             'pixmap': self.pixmap_full, 'pixmap_source_path': self.current_image_path,
             'crop_rect': self.current_crop, 'col_mat': self.mat_color, 'col_frame': self.frame_color,
-            'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.act_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked()
+            'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.act_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked(),
+            'mat_name': "Cotton White",
+            'mat_ply': f"{ply} ({thick_str})" if thick_str != "Custom" else ply
         }
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
         u = self.unit
@@ -888,18 +908,44 @@ class FrameApp(QMainWindow):
         font = painter.font(); font.setPointSize(14); font.setBold(True); painter.setFont(font)
         painter.drawText(100, 150, "MAT BLUEPRINT [TECHNICAL]")
         font.setPointSize(10); font.setBold(False); painter.setFont(font)
-        y = 300; h = 160
-        summary_lines = [
-            f"MAT CUT SIZE: {UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}",
-            f"APERTURE SIZE: {UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}",
-            f"MAT BORDERS: Top: {UnitUtils.format_dual(d['phys_top'], u)}, Bottom: {UnitUtils.format_dual(d['phys_bot'], u)}, Left: {UnitUtils.format_dual(d['phys_left'], u)}, Right: {UnitUtils.format_dual(d['phys_right'], u)}"
+        y = 300; h = 250
+        summary_data = [
+            ("MAT COLOR", d.get('mat_name', 'Cotton White')),
+            ("MAT PLY", d.get('mat_ply', '4-ply (1/16\")')),
+            ("MAT CUT SIZE", f"{UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}"),
+            ("APERTURE SIZE", f"{UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}"),
+            ("MAT BORDERS", f"Top: {UnitUtils.format_dual(d['phys_top'], u)}, Bottom: {UnitUtils.format_dual(d['phys_bot'], u)}, Left: {UnitUtils.format_dual(d['phys_left'], u)}, Right: {UnitUtils.format_dual(d['phys_right'], u)}")
         ]
-        for l in summary_lines:
-            painter.drawText(100, int(y), l); y += h
+
+        col1_w = 1800
+        col2_w = writer.width() - 200 - col1_w
         
-        avail_w, avail_h = writer.width(), writer.height() - y - 2000
+        for i, (label, val) in enumerate(summary_data):
+            if i % 2 == 1:
+                painter.fillRect(100, int(y), col1_w + col2_w, h, QColor(240, 240, 240))
+            
+            painter.drawText(150, int(y + h*0.7), label)
+            painter.drawText(150 + col1_w, int(y + h*0.7), val)
+            
+            # Add color swatch for MAT COLOR row
+            if label == "MAT COLOR":
+                fm = painter.fontMetrics()
+                text_w = fm.horizontalAdvance(val)
+                swatch_size = 120
+                swatch_x = 150 + col1_w + text_w + 100
+                swatch_y = int(y + h*0.7 - swatch_size)
+                
+                # Draw swatch
+                painter.setPen(QPen(Qt.GlobalColor.black, 2))
+                painter.setBrush(d.get('col_mat', Qt.GlobalColor.white))
+                painter.drawRect(swatch_x, swatch_y, swatch_size, swatch_size)
+                painter.setBrush(Qt.BrushStyle.NoBrush) # Reset brush
+            
+            y += h
+        
+        avail_w, avail_h = writer.width(), writer.height() - y - 1000
         scale = min(avail_w * 0.6 / d['cut_w'], avail_h * 0.6 / d['cut_h'])
-        ox, oy = (writer.width() - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2 + 1000
+        ox, oy = (writer.width() - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2 + 500
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
         painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
         painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
