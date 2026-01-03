@@ -2,6 +2,8 @@ import math
 from PyQt6.QtCore import Qt, QRectF, QPointF
 from PyQt6.QtGui import QPen, QFont, QColor
 from .constants import GRID_MAJOR_COLOR, GRID_MINOR_COLOR
+from .colors import COLORS
+import colorsys
 
 def get_fit_metrics(view_w, view_h, content_w, content_h):
     """Calculates scale to fit content within a view while maintaining aspect ratio."""
@@ -50,45 +52,77 @@ def draw_physical_grid(painter, rect, px_per_inch, unit_mode, w_px, h_px):
     painter.restore()
 
 class ColorUtils:
-    COMMON_COLORS = {
-        "Cotton White": (251, 251, 249),
-        "Bright White": (255, 255, 255),
-        "Off-White": (245, 245, 240),
-        "Cream": (255, 253, 208),
-        "Grey": (128, 128, 128),
-        "Black": (0, 0, 0),
-        "Navy": (0, 0, 128),
-        "Royal Blue": (65, 105, 225),
-        "Sky Blue": (135, 206, 235),
-        "Forest Green": (34, 139, 34),
-        "Sage Green": (156, 175, 136),
-        "Lime Green": (85, 255, 0),
-        "Deep Red": (139, 0, 0),
-        "Burgundy": (128, 0, 32),
-        "Tan": (210, 180, 140),
-        "Chocolate": (105, 75, 55),
-        "Gold": (212, 175, 55),
-        "Silver": (192, 192, 192),
-        "Orange": (255, 165, 0),
-        "Purple": (128, 0, 128),
-        "Teal": (0, 128, 128),
-        "Hot Pink": (255, 105, 180),
-    }
-
     @staticmethod
     def get_closest_name(qcolor):
         r1, g1, b1 = qcolor.red(), qcolor.green(), qcolor.blue()
         best_match = "Custom"
         min_dist = float('inf')
         
-        for name, (r2, g2, b2) in ColorUtils.COMMON_COLORS.items():
-            dist = math.sqrt((r1 - r2)**2 + (g1 - g2)**2 + (b1 - b2)**2)
+        # Simple weighted Euclidean distance (better than raw RGB for human perception)
+        # Weights: R: 0.3, G: 0.59, B: 0.11 (standard luminance weights, but for distance we use:
+        # Red: 2, Green: 4, Blue: 3 - a common fast approximation)
+        for name, (r2, g2, b2) in COLORS.items():
+            rmean = (r1 + r2) / 2
+            r = r1 - r2
+            g = g1 - g2
+            b = b1 - b2
+            dist = math.sqrt((((512+rmean)*r*r)/256) + 4*g*g + (((767-rmean)*b*b)/256))
+            
             if dist < min_dist:
                 min_dist = dist
                 best_match = name
         
-        # Threshold for a "good" match
-        if min_dist < 60:
-            if min_dist < 5: return best_match
-            return f"{best_match} (~{qcolor.name().upper()})"
-        return f"Custom ({qcolor.name().upper()})"
+        # Higher threshold for descriptive names (80)
+        if min_dist < 80:
+            return best_match
+            
+        # Descriptive Fallback for true outliers
+        h, l, s = colorsys.rgb_to_hls(r1/255.0, g1/255.0, b1/255.0)
+        
+        # Hue Name
+        hue_map = [
+            (0.05, "Red"), (0.15, "Orange"), (0.20, "Yellow"), 
+            (0.45, "Green"), (0.55, "Cyan"), (0.75, "Blue"), 
+            (0.85, "Purple"), (0.95, "Magenta"), (1.0, "Red")
+        ]
+        hue_name = "Red"
+        for thresh, name in hue_map:
+            if h <= thresh:
+                hue_name = name
+                break
+        
+        # Qualifiers
+        lum = ""
+        if l < 0.15: lum = "Deep "
+        elif l < 0.35: lum = "Dark "
+        elif l > 0.85: lum = "Pale "
+        elif l > 0.65: lum = "Light "
+        
+        sat = ""
+        if s < 0.15: 
+            if l < 0.2: return "Black"
+            if l > 0.8: return "White"
+            return f"{lum}Gray-ish".strip()
+        
+        if s < 0.4: sat = "Muted "
+        elif s > 0.85: sat = "Vibrant "
+        
+        return f"{sat}{lum}{hue_name}".strip()
+
+    @staticmethod
+    def get_average_color(qpixmap):
+        """Calculates average color of a QPixmap/QImage."""
+        if not qpixmap or qpixmap.isNull():
+            return QColor(255, 255, 255)
+        img = qpixmap.toImage()
+        img = img.scaled(100, 100) # scale down for speed
+        r, g, b, count = 0, 0, 0, 0
+        for x in range(img.width()):
+            for y in range(img.height()):
+                c = QColor(img.pixel(x, y))
+                r += c.red()
+                g += c.green()
+                b += c.blue()
+                count += 1
+        if count == 0: return QColor(255, 255, 255)
+        return QColor(r // count, g // count, b // count)

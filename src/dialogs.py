@@ -2,12 +2,15 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QPushButton, QFileDialog, QSlider, QSizePolicy,
                              QInputDialog, QListWidget, QListWidgetItem, 
                              QAbstractItemView, QStackedWidget, QCheckBox, 
-                             QFrame, QWidget, QMessageBox)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal, QTimer, QSettings
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon, QImage, QFont
+                             QFrame, QWidget, QMessageBox, QColorDialog,
+                             QGridLayout, QGroupBox, QRadioButton, QButtonGroup, 
+                             QFormLayout, QScrollArea)
+from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal, QTimer, QSettings
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon, QImage, QFont, QPdfWriter, QPageSize
 import os
 import threading
 import requests
+from .utils import ColorUtils, UnitUtils
 from .google_photos import GooglePhotosManager
 
 class TextureSamplerDialog(QDialog):
@@ -790,3 +793,105 @@ class AboutDialog(QDialog):
         layout.addWidget(lbl)
         btn = QPushButton("Close"); btn.clicked.connect(self.accept)
         layout.addWidget(btn)
+
+from .constants import QUICK_MAT_COLORS, QUICK_FRAME_COLORS
+
+class ProfessionalColorPickerDialog(QColorDialog):
+    def __init__(self, initial_color, prefix="COLOR", parent=None):
+        super().__init__(initial_color, parent)
+        self.prefix = prefix
+        self.setOption(QColorDialog.ColorDialogOption.NoButtons, False)
+        self.setWindowTitle(f"Select {prefix.title()}")
+        
+        # Style the dialog for a more premium feel
+        self.setStyleSheet("""
+            QColorDialog { background-color: #2b2b2b; }
+            QLabel { color: #ddd; }
+            QPushButton { padding: 5px 15px; }
+        """)
+
+        # Force Qt dialog to ensure we can customize the layout
+        self.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+
+        # 1. Change "HTML" to "Hex"
+        self.rename_html_label()
+        
+        # 2. Name Label (Bottom)
+        self.lbl_name = QLabel("...")
+        self.lbl_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_name.setStyleSheet("""
+            background-color: #1a1a1a;
+            color: #ffc107;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 4px 12px;
+            border-radius: 10px;
+            border: 1px solid #444;
+        """)
+        
+        # 3. Quick Swatches Container
+        self.swatch_container = QWidget()
+        swatch_layout = QHBoxLayout(self.swatch_container)
+        swatch_layout.setSpacing(4)
+        swatch_layout.setContentsMargins(10, 5, 10, 5)
+        swatch_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        colors = QUICK_MAT_COLORS if prefix.lower().startswith("mat") else QUICK_FRAME_COLORS
+        for col_str in colors:
+            btn = QPushButton()
+            btn.setFixedSize(24, 24)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(f"background-color: {col_str}; border: 1px solid #555; border-radius: 4px;")
+            btn.clicked.connect(lambda _, c=col_str: self.setCurrentColor(QColor(c)))
+            swatch_layout.addWidget(btn)
+
+        # 4. Inject Widgets
+        layout = self.layout()
+        if isinstance(layout, QVBoxLayout):
+            # Name Label goes above the ButtonBox (last item)
+            target_idx = max(0, layout.count() - 1)
+            layout.insertWidget(target_idx, self.lbl_name)
+            
+            # Swatches: Try to put under "Pick Screen Color"
+            if not self.place_swatches_under_picker(layout):
+                # Fallback: Put above Name Label
+                layout.insertWidget(target_idx, self.swatch_container)
+        else:
+            layout.addWidget(self.lbl_name)
+            layout.addWidget(self.swatch_container)
+        
+        self.currentColorChanged.connect(self.update_name)
+        self.update_name(initial_color)
+
+    def place_swatches_under_picker(self, layout):
+        if not layout: return False
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item.widget():
+                w = item.widget()
+                if isinstance(w, QPushButton):
+                    txt = w.text().replace("&", "").lower()
+                    if "pick" in txt and "screen" in txt:
+                        # Found it!
+                        if isinstance(layout, QVBoxLayout):
+                            layout.insertWidget(i + 1, self.swatch_container)
+                            return True
+                # Check if the widget has a layout to recurse into
+                if w.layout():
+                    if self.place_swatches_under_picker(w.layout()):
+                        return True
+            elif item.layout():
+                if self.place_swatches_under_picker(item.layout()):
+                    return True
+        return False
+
+    def rename_html_label(self):
+        # Programmatically find the "HTML" label and change it
+        for label in self.findChildren(QLabel):
+            if "&HTML" in label.text():
+                label.setText("Hex:")
+                break
+
+    def update_name(self, color):
+        name = ColorUtils.get_closest_name(color)
+        self.lbl_name.setText(f"{self.prefix.upper()}: {name.upper()}")

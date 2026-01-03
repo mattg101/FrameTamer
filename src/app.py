@@ -14,7 +14,8 @@ from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings
 from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, 
                          QPolygonF, QFont, QImageReader, QPageSize, QAction, QKeySequence, QActionGroup)
 
-from .constants import DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, RICK_ROLL_URL, RICK_ASCII
+from .constants import (DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, DEFAULT_TEXTURE_PATH, 
+                        QUICK_MAT_COLORS, QUICK_FRAME_COLORS, RICK_ROLL_URL, RICK_ASCII)
 from .utils import UnitUtils, ColorUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox, MetricCard
 from .dialogs import (TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, 
@@ -26,9 +27,9 @@ class FrameApp(QMainWindow):
         self.setWindowTitle("Pro Frame & Mat Studio v14.0")
         self.resize(1280, 800)
         self.pixmap_full = None
-        self.mat_color = DEFAULT_MAT_COLOR
+        self.mat_color = QColor("#fbfbf9") # Cotton White Default
         self.frame_color = DEFAULT_FRAME_COLOR
-        self.frame_texture = None
+        self.frame_texture = QPixmap(DEFAULT_TEXTURE_PATH) if os.path.exists(DEFAULT_TEXTURE_PATH) else None
         self.current_crop = QRectF(0,0,1,1)
         self.unit = "in"
         self.last_calc = {}
@@ -60,8 +61,8 @@ class FrameApp(QMainWindow):
         self.spin_print_border.setValue(float(settings.value("print_border", 0.25)))
         
         # Load colors
-        mat_col = settings.value("mat_color", DEFAULT_MAT_COLOR.name())
-        self.mat_color = QColor(mat_col)
+        # Mat color always starts as Cotton White as per requirement
+        self.mat_color = QColor("#fbfbf9") 
         frame_col = settings.value("frame_color", DEFAULT_FRAME_COLOR.name())
         self.frame_color = QColor(frame_col)
         
@@ -335,7 +336,8 @@ class FrameApp(QMainWindow):
         l_media.addLayout(h_import)
         
         v_tex = QVBoxLayout(); v_tex.setSpacing(4)
-        self.btn_extract_tex = QPushButton("Extract Frame Texture"); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
+        tex_label = "Update Frame Texture" if self.frame_texture else "Extract Frame Texture"
+        self.btn_extract_tex = QPushButton(tex_label); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
         self.btn_lib_tex = QPushButton("Frame Texture Library"); self.btn_lib_tex.clicked.connect(self.select_from_library)
         # User requested library at "bottom left", so stack it second in vertical or first?
         # Stacked: Extract then Library (Library is below)
@@ -424,9 +426,13 @@ class FrameApp(QMainWindow):
         self.group_app = CollapsibleBox("Appearance")
         l_app = QVBoxLayout()
         h_col = QHBoxLayout(); 
-        b_mc = QPushButton("Mat Color"); b_mc.clicked.connect(self.pick_mat)
-        b_fc = QPushButton("Frame Color"); b_fc.clicked.connect(self.pick_frame)
-        h_col.addWidget(b_mc); h_col.addWidget(b_fc)
+        v_mc = QVBoxLayout(); b_mc = QPushButton("Mat Color"); b_mc.clicked.connect(self.pick_mat)
+        v_mc.addWidget(b_mc); self._add_quick_swatches(v_mc, QUICK_MAT_COLORS, True)
+        
+        v_fc = QVBoxLayout(); b_fc = QPushButton("Frame Color"); b_fc.clicked.connect(self.pick_frame)
+        v_fc.addWidget(b_fc); self._add_quick_swatches(v_fc, QUICK_FRAME_COLORS, False)
+        
+        h_col.addLayout(v_mc); h_col.addLayout(v_fc)
         l_app.addLayout(h_col)
 
         l_mat_info = QFormLayout()
@@ -437,6 +443,34 @@ class FrameApp(QMainWindow):
         l_mat_info.addRow("Mat Ply:", self.combo_mat_ply)
         l_mat_info.addRow("", self.lbl_mat_thick)
         l_app.addLayout(l_mat_info)
+
+        self.lbl_mat_color_name = QLabel("MAT: COTTON WHITE")
+        self.lbl_mat_color_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_mat_color_name.setStyleSheet("""
+            background-color: #1a1a1a;
+            color: #ffc107;
+            font-weight: bold;
+            font-size: 10px;
+            padding: 3px 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            margin-top: 2px;
+        """)
+        l_app.addWidget(self.lbl_mat_color_name)
+
+        self.lbl_frame_color_name = QLabel("FRAME: BLACK")
+        self.lbl_frame_color_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_frame_color_name.setStyleSheet("""
+            background-color: #1a1a1a;
+            color: #ffc107;
+            font-weight: bold;
+            font-size: 10px;
+            padding: 3px 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            margin-top: 2px;
+        """)
+        l_app.addWidget(self.lbl_frame_color_name)
 
         self.group_app.set_content_layout(l_app)
         self.c_layout.addWidget(self.group_app)
@@ -526,6 +560,26 @@ class FrameApp(QMainWindow):
         layout.addWidget(QLabel(label), row, 0); layout.addWidget(s, row, 1)
         if extra: layout.addWidget(extra, row, 2)
         return s
+
+    def _add_quick_swatches(self, layout, colors, is_mat):
+        h = QHBoxLayout(); h.setSpacing(2); h.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for col_str in colors:
+            btn = QPushButton()
+            btn.setFixedSize(22, 22)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(f"background-color: {col_str}; border: 1px solid #444; border-radius: 4px;")
+            btn.clicked.connect(lambda _, c=col_str, m=is_mat: self._apply_quick_color(c, m))
+            h.addWidget(btn)
+        layout.addLayout(h)
+
+    def _apply_quick_color(self, hex_str, is_mat):
+        if is_mat:
+            self.mat_color = QColor(hex_str)
+        else:
+            self.frame_color = QColor(hex_str)
+            self.frame_texture = None
+            self.btn_extract_tex.setText("Extract Texture")
+        self.recalc()
 
     def setup_visualization_area(self, parent_layout):
         src_wid = QWidget(); src_l = QVBoxLayout(src_wid); src_l.setContentsMargins(0, 20, 0, 0)
@@ -779,12 +833,16 @@ class FrameApp(QMainWindow):
 
     def on_crop_change(self, rect): self.current_crop = rect; self.recalc()
     def pick_mat(self): 
-        c = QColorDialog.getColor(self.mat_color); 
-        if c.isValid(): self.mat_color = c; self.recalc()
+        from .dialogs import ProfessionalColorPickerDialog
+        dlg = ProfessionalColorPickerDialog(self.mat_color, "Mat Color", self)
+        if dlg.exec():
+            self.mat_color = dlg.selectedColor()
+            self.recalc()
     def pick_frame(self): 
-        c = QColorDialog.getColor(self.frame_color); 
-        if c.isValid(): 
-            self.frame_color = c
+        from .dialogs import ProfessionalColorPickerDialog
+        dlg = ProfessionalColorPickerDialog(self.frame_color, "Frame Color", self)
+        if dlg.exec():
+            self.frame_color = dlg.selectedColor()
             self.frame_texture = None
             self.btn_extract_tex.setText("Extract Texture")
             self.recalc()
@@ -843,6 +901,11 @@ class FrameApp(QMainWindow):
         elif ply == "Overlap (Custom)": thick_str = "Custom"
         self.lbl_mat_thick.setText(f"Thickness: {thick_str}")
 
+        # Frame Color Name logic
+        frame_actual_color = self.frame_color
+        if hasattr(self, 'frame_texture') and self.frame_texture:
+            frame_actual_color = ColorUtils.get_average_color(self.frame_texture)
+
         self.last_calc = {
             'unit': self.unit, 'cut_w': mat_cut_w * to_in, 'cut_h': mat_cut_h * to_in,
             'mat_top': fmt * to_in, 'mat_bottom': fmb * to_in, 'mat_left': fml * to_in, 'mat_right': fmr * to_in,
@@ -854,8 +917,11 @@ class FrameApp(QMainWindow):
             'crop_rect': self.current_crop, 'col_mat': self.mat_color, 'col_frame': self.frame_color,
             'frame_texture': self.frame_texture, 'no_mat': self.chk_no_mat.isChecked() if self.act_mode_art.isChecked() else False, 'link_all': self.chk_link_all.isChecked(),
             'mat_name': ColorUtils.get_closest_name(self.mat_color),
+            'frame_name': ColorUtils.get_closest_name(frame_actual_color),
             'mat_ply': f"{ply} ({thick_str})" if thick_str != "Custom" else ply
         }
+        self.lbl_mat_color_name.setText(f"MAT: {self.last_calc['mat_name'].upper()}")
+        self.lbl_frame_color_name.setText(f"FRAME: {self.last_calc['frame_name'].upper()}")
         for w in [self.preview, self.editor_cropper, self.editor_mat]: w.update_params(self.last_calc)
         u = self.unit
         mat_info = ""

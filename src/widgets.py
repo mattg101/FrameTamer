@@ -1,9 +1,8 @@
 import math
-from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget, QVBoxLayout, QToolButton, QFrame, QGridLayout
+from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget, QVBoxLayout, QToolButton, QFrame, QGridLayout, QColorDialog, QHBoxLayout, QPushButton
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF, QSize, QPropertyAnimation, QParallelAnimationGroup, QAbstractAnimation
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QRegion, QPolygonF, QBrush, QTransform
-
-from .utils import get_fit_metrics, UnitUtils, draw_physical_grid
+from .utils import get_fit_metrics, UnitUtils, draw_physical_grid, ColorUtils
 
 class SourceCropper(QLabel):
     cropChanged = pyqtSignal(QRectF) 
