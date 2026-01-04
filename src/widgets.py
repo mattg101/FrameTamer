@@ -1,7 +1,7 @@
 import math
 from PyQt6.QtWidgets import QLabel, QSizePolicy, QWidget, QVBoxLayout, QToolButton, QFrame, QGridLayout, QColorDialog, QHBoxLayout, QPushButton
 from PyQt6.QtCore import Qt, QRectF, pyqtSignal, QPointF, QSize, QPropertyAnimation, QParallelAnimationGroup, QAbstractAnimation
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QRegion, QPolygonF, QBrush, QTransform
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QRegion, QPolygonF, QBrush, QTransform, QPainterPath
 from .utils import get_fit_metrics, UnitUtils, draw_physical_grid, ColorUtils
 
 class SourceCropper(QLabel):
@@ -171,9 +171,14 @@ class InteractiveMatEditor(QLabel):
         start_x, start_y = cx - total_w / 2, cy - total_h / 2
         r_hole = QRectF(start_x + p['mat_left']*scale, start_y + p['mat_top']*scale, p['img_w']*scale, p['img_h']*scale)
         face_px = p['frame_face'] * scale
+        radius_px = p.get('corner_radius', 0.0) * scale
 
         painter.setBrush(p['col_frame']); painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawRect(QRectF(start_x - face_px, start_y - face_px, total_w + 2*face_px, total_h + 2*face_px))
+        r_frame = QRectF(start_x - face_px, start_y - face_px, total_w + 2*face_px, total_h + 2*face_px)
+        if radius_px > 0:
+            painter.drawRoundedRect(r_frame, radius_px, radius_px)
+        else:
+            painter.drawRect(r_frame)
         
         if not p.get('no_mat', False):
             painter.setBrush(p['col_mat']); painter.drawRect(QRectF(start_x, start_y, total_w, total_h))
@@ -266,6 +271,12 @@ class FramePreviewLabel(QLabel):
 
         outer_rect = QRectF(0, 0, render_w, render_h)
         inner_rect = QRectF(face_px, face_px, render_w - 2*face_px, render_h - 2*face_px)
+
+        radius_px = p.get('corner_radius', 0.0) * scale
+        if radius_px > 0:
+            path = QPainterPath()
+            path.addRoundedRect(outer_rect, radius_px, radius_px)
+            painter.setClipPath(path)
         
         otl, otr, obl, obr = outer_rect.topLeft(), outer_rect.topRight(), outer_rect.bottomLeft(), outer_rect.bottomRight()
         itl, itr, ibl, ibr = inner_rect.topLeft(), inner_rect.topRight(), inner_rect.bottomLeft(), inner_rect.bottomRight()

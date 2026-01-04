@@ -79,6 +79,9 @@ class FrameApp(QMainWindow):
         self.spin_min_gutter.setValue(float(settings.value("mat_gutter", 0.125)))
         self.combo_align.setCurrentIndex(int(settings.value("mat_align_id", 0)))
         
+        self.chk_radius.setChecked(settings.value("rounded_corners", False, type=bool))
+        self.spin_radius.setValue(float(settings.value("corner_radius", 0.25)))
+        
         self.updating_ui = False
         self.recalc()
 
@@ -92,6 +95,8 @@ class FrameApp(QMainWindow):
         settings.setValue("mat_color", self.mat_color.name())
         settings.setValue("frame_color", self.frame_color.name())
         settings.setValue("unit", self.unit)
+        settings.setValue("rounded_corners", self.chk_radius.isChecked())
+        settings.setValue("corner_radius", self.spin_radius.value())
         super().closeEvent(event)
 
     def setup_menu(self):
@@ -479,6 +484,17 @@ class FrameApp(QMainWindow):
         l_mat_info.addRow("Mat Ply:", self.combo_mat_ply)
         l_mat_info.addRow("", self.lbl_mat_thick)
         l_app.addLayout(l_mat_info)
+
+        l_radius = QHBoxLayout()
+        self.chk_radius = QCheckBox("Round Corners")
+        self.chk_radius.stateChanged.connect(self.recalc)
+        self.spin_radius = self._create_spin(0.25)
+        self.spin_radius.setEnabled(False)
+        self.chk_radius.toggled.connect(self.spin_radius.setEnabled)
+        l_radius.addWidget(self.chk_radius)
+        l_radius.addWidget(QLabel("Radius:"))
+        l_radius.addWidget(self.spin_radius)
+        l_app.addLayout(l_radius)
 
         self.lbl_mat_color_name = QLabel("MAT: COTTON WHITE")
         self.lbl_mat_color_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -886,6 +902,7 @@ class FrameApp(QMainWindow):
     def recalc(self):
         if self.updating_ui: return
         face, rabbet, p_border = self.spin_face.value(), self.spin_rabbet.value(), self.spin_print_border.value()
+        radius = self.spin_radius.value() if self.chk_radius.isChecked() else 0.0
         tol = 3.0/25.4 if self.unit == "in" else 3.0
         to_in = 1.0 if self.unit == "in" else 1/25.4
 
@@ -947,6 +964,7 @@ class FrameApp(QMainWindow):
             'mat_top': fmt * to_in, 'mat_bottom': fmb * to_in, 'mat_left': fml * to_in, 'mat_right': fmr * to_in,
             'phys_top': (fmt+hidden)*to_in, 'phys_bot': (fmb+hidden)*to_in, 'phys_left': (fml+hidden)*to_in, 'phys_right': (fmr+hidden)*to_in,
             'img_w': final_w * to_in, 'img_h': final_h * to_in,
+            'corner_radius': radius * to_in,
             'print_w': (final_w + 2*p_border)*to_in, 'print_h': (final_h + 2*p_border)*to_in, 'p_border': p_border*to_in,
             'outer_w': ow * to_in, 'outer_h': oh * to_in, 'frame_face': face * to_in, 
             'pixmap': self.pixmap_full, 'pixmap_source_path': self.current_image_path,
@@ -1094,7 +1112,8 @@ class FrameApp(QMainWindow):
             ("MAT PLY", d.get('mat_ply', '4-ply (1/16\")')),
             ("MAT CUT SIZE", f"{UnitUtils.format_pdf(d['cut_w'], u)} x {UnitUtils.format_pdf(d['cut_h'], u)}"),
             ("APERTURE SIZE", f"{UnitUtils.format_pdf(d['img_w'], u)} x {UnitUtils.format_pdf(d['img_h'], u)}"),
-            ("MAT BORDERS", f"T: {UnitUtils.format_pdf(d['phys_top'], u)}, B: {UnitUtils.format_pdf(d['phys_bot'], u)}, L: {UnitUtils.format_pdf(d['phys_left'], u)}, R: {UnitUtils.format_pdf(d['phys_right'], u)}")
+            ("MAT BORDERS", f"T: {UnitUtils.format_pdf(d['phys_top'], u)}, B: {UnitUtils.format_pdf(d['phys_bot'], u)}, L: {UnitUtils.format_pdf(d['phys_left'], u)}, R: {UnitUtils.format_pdf(d['phys_right'], u)}"),
+            ("CORNER RADIUS", UnitUtils.format_pdf(d['corner_radius'], u) if d.get('corner_radius', 0) > 0 else "None")
         ]
 
         col1_w = 600 * sf  # Reduced from 1800
@@ -1129,7 +1148,16 @@ class FrameApp(QMainWindow):
         scale = min(avail_w * 0.8 / d['cut_w'], avail_h * 0.85 / d['cut_h'])  # Increased from 0.6
         ox, oy = (width - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
-        painter.setPen(QPen(Qt.GlobalColor.black, max(1, int(5*sf)))); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
+        
+        radius_px = d.get('corner_radius', 0.0) * scale
+        painter.setPen(QPen(Qt.GlobalColor.black, max(1, int(5*sf))))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        r_frame = QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale)
+        if radius_px > 0:
+            painter.drawRoundedRect(r_frame, radius_px, radius_px)
+        else:
+            painter.drawRect(r_frame)
+            
         painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
         
         # Annotate borders directly in margins (bold + fractional formatting)
@@ -1241,4 +1269,6 @@ class FrameApp(QMainWindow):
         settings.setValue("mat_match_opp", self.chk_link.isChecked())
         settings.setValue("mat_gutter", self.spin_min_gutter.value())
         settings.setValue("mat_align_id", self.combo_align.currentIndex())
+        settings.setValue("rounded_corners", self.chk_radius.isChecked())
+        settings.setValue("corner_radius", self.spin_radius.value())
         QMessageBox.information(self, "Defaults Saved", "Current settings have been saved as defaults for new sessions.")
