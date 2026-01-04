@@ -360,7 +360,7 @@ class FrameApp(QMainWindow):
 
     def setup_controls_content(self):
         # 1. Source Media Group
-        self.group_media = CollapsibleBox("Source Media")
+        self.group_media = CollapsibleBox("Source Media", color="#1e5a8a", start_expanded=True)
         l_media = QVBoxLayout(); l_media.setSpacing(6)
         
         h_import = QHBoxLayout()
@@ -384,7 +384,7 @@ class FrameApp(QMainWindow):
         self.c_layout.addWidget(self.group_media)
 
         # 2. Dimensions Group
-        self.group_dims = CollapsibleBox("Dimensions")
+        self.group_dims = CollapsibleBox("Dimensions", color="#5a3d8a")
         l_dims = QVBoxLayout(); l_dims.setSpacing(8)
         
         # Frame Aperture
@@ -459,7 +459,7 @@ class FrameApp(QMainWindow):
         self.c_layout.addWidget(self.group_dims)
 
         # 3. Appearance Group
-        self.group_app = CollapsibleBox("Appearance")
+        self.group_app = CollapsibleBox("Appearance", color="#8a5a1e")
         l_app = QVBoxLayout()
         h_col = QHBoxLayout(); 
         v_mc = QVBoxLayout(); b_mc = QPushButton("Mat Color"); b_mc.clicked.connect(self.pick_mat)
@@ -1046,9 +1046,24 @@ class FrameApp(QMainWindow):
             writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
             writer.setResolution(300)
             painter = QPainter(writer)
-            self._render_pdf_page1(painter, writer.width(), writer.height())
+            
+            # Draw the pre-rendered images to ensure consistency with preview
+            # Scale to fit the PDF page
+            w_scale = writer.width() / img_p1.width()
+            h_scale = writer.height() / img_p1.height()
+            scale = min(w_scale, h_scale)
+            
+            # Page 1
+            scaled_w = int(img_p1.width() * scale)
+            scaled_h = int(img_p1.height() * scale)
+            x_offset = (writer.width() - scaled_w) // 2
+            y_offset = (writer.height() - scaled_h) // 2
+            painter.drawImage(x_offset, y_offset, img_p1.scaled(scaled_w, scaled_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            
+            # Page 2
             writer.newPage()
-            self._render_pdf_page2(painter, writer.width(), writer.height())
+            painter.drawImage(x_offset, y_offset, img_p2.scaled(scaled_w, scaled_h, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            
             painter.end()
             
             self.progress_bar.setValue(100)

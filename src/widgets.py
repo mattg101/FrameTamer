@@ -332,19 +332,19 @@ class FramePreviewLabel(QLabel):
     def resizeEvent(self, event): self.refresh_render(); super().resizeEvent(event)
 
 class CollapsibleBox(QWidget):
-    def __init__(self, title="", parent=None):
+    def __init__(self, title="", color="#333", start_expanded=False, parent=None):
         super().__init__(parent)
 
-        self.toggle_button = QToolButton(text=title, checkable=True, checked=True)
-        self.toggle_button.setStyleSheet("""
-            QToolButton { 
+        self.toggle_button = QToolButton(text=title, checkable=True, checked=not start_expanded)
+        self.toggle_button.setStyleSheet(f"""
+            QToolButton {{ 
                 border: none; 
                 font-weight: bold; 
-                background-color: #333; 
+                background-color: {color}; 
                 padding: 5px; 
                 text-align: left;
-            }
-            QToolButton:hover { background-color: #444; }
+            }}
+            QToolButton:hover {{ background-color: #444; }}
         """)
         self.toggle_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.toggle_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -356,7 +356,7 @@ class CollapsibleBox(QWidget):
         self.content_area.setMinimumHeight(0)
         
         self.content_area = QWidget()
-        # Initial State: Visible
+        # Initial State: Based on start_expanded
 
         self.main_layout = QVBoxLayout(self)
         self.main_layout.setSpacing(0)
