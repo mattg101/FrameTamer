@@ -9,9 +9,10 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QFileDialog, QColorDialog,
                              QGroupBox, QGridLayout, QDoubleSpinBox, QComboBox, QCheckBox, 
                              QSizePolicy, QFormLayout, QButtonGroup, QStackedWidget, 
-                             QScrollArea, QFrame, QMessageBox, QRadioButton, QInputDialog, QLineEdit)
-from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings
-from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, 
+                             QScrollArea, QFrame, QMessageBox, QRadioButton, QInputDialog, QLineEdit,
+                             QProgressBar, QApplication)
+from PyQt6.QtCore import Qt, QRectF, QPointF, QSize, QSettings, QTimer
+from PyQt6.QtGui import (QPixmap, QPainter, QColor, QPen, QPdfWriter, QImage,
                          QPolygonF, QFont, QImageReader, QPageSize, QAction, QKeySequence, QActionGroup)
 
 from .constants import (DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, DEFAULT_TEXTURE_PATH, 
@@ -19,7 +20,7 @@ from .constants import (DEFAULT_MAT_COLOR, DEFAULT_FRAME_COLOR, DEFAULT_TEXTURE_
 from .utils import UnitUtils, ColorUtils
 from .widgets import SourceCropper, InteractiveMatEditor, FramePreviewLabel, CollapsibleBox, MetricCard
 from .dialogs import (TextureSamplerDialog, TextureLibraryDialog, PresetManagerDialog, 
-                      GooglePhotosDialog, TutorialDialog, AboutDialog)
+                      GooglePhotosDialog, TutorialDialog, AboutDialog, PDFPreviewDialog)
 
 class FrameApp(QMainWindow):
     def __init__(self):
@@ -278,6 +279,9 @@ class FrameApp(QMainWindow):
         workspace_layout = QHBoxLayout(); workspace_layout.setSpacing(15)
         main_v_layout.addLayout(workspace_layout)
 
+        # Bottom Status Bar
+        self.setup_status_bar(main_v_layout)
+
         panel_container = QWidget(); panel_layout = QVBoxLayout(panel_container); panel_container.setFixedWidth(360)
         panel_layout.setContentsMargins(10, 10, 10, 10)
         scroll_area = QScrollArea(); scroll_area.setWidgetResizable(True); scroll_area.setFrameShape(QFrame.Shape.NoFrame)
@@ -321,6 +325,38 @@ class FrameApp(QMainWindow):
         layout.addWidget(btn_jpg)
 
         parent_layout.addWidget(export_panel)
+
+    def setup_status_bar(self, parent_layout):
+        self.status_panel = QFrame()
+        self.status_panel.setFixedHeight(30)
+        self.status_panel.setStyleSheet("QFrame { background-color: #1e1e1e; border-top: 1px solid #333; }")
+        layout = QHBoxLayout(self.status_panel); layout.setContentsMargins(10, 0, 10, 0); layout.setSpacing(15)
+
+        self.lbl_status = QLabel("Ready")
+        self.lbl_status.setStyleSheet("color: #888; font-size: 11px;")
+        layout.addWidget(self.lbl_status)
+
+        layout.addStretch()
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedWidth(150)
+        self.progress_bar.setFixedHeight(12)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                background-color: #333;
+                border: none;
+                border-radius: 6px;
+            }
+            QProgressBar::chunk {
+                background-color: #0078d7;
+                border-radius: 6px;
+            }
+        """)
+        self.progress_bar.hide()
+        layout.addWidget(self.progress_bar)
+
+        parent_layout.addWidget(self.status_panel)
 
     def setup_controls_content(self):
         # 1. Source Media Group
@@ -964,93 +1000,216 @@ class FrameApp(QMainWindow):
 
     def export_pdf(self):
         if not self.last_calc: return
-        fn, _ = QFileDialog.getSaveFileName(self, "Save PDF", "Mat_Blueprint.pdf", "PDF Files (*.pdf)")
-        if not fn: return
+        
+        # 1. Rendering Phase
+        self.lbl_status.setText("Rendering PDF Preview...")
+        self.progress_bar.setValue(10)
+        self.progress_bar.show()
+        QApplication.processEvents()
+
+        # Render Page 1 (Blueprint) to QImage
+        img_p1 = QImage(2480, 3508, QImage.Format.Format_ARGB32) # A4 @ 300 DPI approx
+        img_p1.fill(Qt.GlobalColor.white)
+        p1 = QPainter(img_p1)
+        self._render_pdf_page1(p1, 2480, 3508)
+        p1.end()
+        self.progress_bar.setValue(40)
+        QApplication.processEvents()
+
+        # Render Page 2 (Visual) to QImage
+        img_p2 = QImage(2480, 3508, QImage.Format.Format_ARGB32)
+        img_p2.fill(Qt.GlobalColor.white)
+        p2 = QPainter(img_p2)
+        self._render_pdf_page2(p2, 2480, 3508)
+        p2.end()
+        self.progress_bar.setValue(70)
+        QApplication.processEvents()
+
+        # Show Preview
+        dlg = PDFPreviewDialog(QPixmap.fromImage(img_p1), QPixmap.fromImage(img_p2), self)
+        self.progress_bar.setValue(100)
+        QApplication.processEvents()
+        
+        if dlg.exec():
+            # 2. Saving Phase
+            fn, _ = QFileDialog.getSaveFileName(self, "Save PDF", "Mat_Blueprint.pdf", "PDF Files (*.pdf)")
+            if not fn:
+                self.progress_bar.hide()
+                self.lbl_status.setText("Ready")
+                return
+
+            self.lbl_status.setText("Saving PDF...")
+            self.progress_bar.setValue(50)
+            QApplication.processEvents()
+
+            writer = QPdfWriter(fn)
+            writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
+            writer.setResolution(300)
+            painter = QPainter(writer)
+            self._render_pdf_page1(painter, writer.width(), writer.height())
+            writer.newPage()
+            self._render_pdf_page2(painter, writer.width(), writer.height())
+            painter.end()
+            
+            self.progress_bar.setValue(100)
+            self.lbl_status.setText(f"Saved: {os.path.basename(fn)}")
+            QTimer.singleShot(3000, lambda: self.lbl_status.setText("Ready"))
+        else:
+            self.lbl_status.setText("Ready")
+
+        self.progress_bar.hide()
+
+    def _render_pdf_page1(self, painter, width, height):
         d = self.last_calc; u = d['unit']
-        writer = QPdfWriter(fn); writer.setPageSize(QPageSize(QPageSize.PageSizeId.A4))
-        painter = QPainter(writer)
+        
+        # Scale factor: QPdfWriter @ 300 DPI A4 is ~3508 height
+        # All positions/sizes designed for that baseline
+        sf = height / 3508.0
         
         # Page 1: Blueprint
-        font = painter.font(); font.setPointSize(14); font.setBold(True); painter.setFont(font)
-        painter.drawText(100, 150, "MAT BLUEPRINT [TECHNICAL]")
-        font.setPointSize(10); font.setBold(False); painter.setFont(font)
-        y = 300; h = 250
+        font = painter.font()
+        font.setPointSize(max(1, int(48 * sf))); font.setBold(True); painter.setFont(font)
+        painter.drawText(int(100*sf), int(180*sf), "MAT BLUEPRINT [TECHNICAL]")
+        font.setPointSize(max(1, int(32 * sf))); font.setBold(False); painter.setFont(font)
+        
+        # Compact table layout
+        y = 250 * sf; h = 130 * sf  # Row height increased for larger font
         summary_data = [
             ("MAT COLOR", d.get('mat_name', 'Cotton White')),
             ("MAT PLY", d.get('mat_ply', '4-ply (1/16\")')),
-            ("MAT CUT SIZE", f"{UnitUtils.format_dual(d['cut_w'], u)} x {UnitUtils.format_dual(d['cut_h'], u)}"),
-            ("APERTURE SIZE", f"{UnitUtils.format_dual(d['img_w'], u)} x {UnitUtils.format_dual(d['img_h'], u)}"),
-            ("MAT BORDERS", f"Top: {UnitUtils.format_dual(d['phys_top'], u)}, Bottom: {UnitUtils.format_dual(d['phys_bot'], u)}, Left: {UnitUtils.format_dual(d['phys_left'], u)}, Right: {UnitUtils.format_dual(d['phys_right'], u)}")
+            ("MAT CUT SIZE", f"{UnitUtils.format_pdf(d['cut_w'], u)} x {UnitUtils.format_pdf(d['cut_h'], u)}"),
+            ("APERTURE SIZE", f"{UnitUtils.format_pdf(d['img_w'], u)} x {UnitUtils.format_pdf(d['img_h'], u)}"),
+            ("MAT BORDERS", f"T: {UnitUtils.format_pdf(d['phys_top'], u)}, B: {UnitUtils.format_pdf(d['phys_bot'], u)}, L: {UnitUtils.format_pdf(d['phys_left'], u)}, R: {UnitUtils.format_pdf(d['phys_right'], u)}")
         ]
 
-        col1_w = 1800
-        col2_w = writer.width() - 200 - col1_w
+        col1_w = 600 * sf  # Reduced from 1800
+        col2_w = width - 200*sf - col1_w
         
         for i, (label, val) in enumerate(summary_data):
             if i % 2 == 1:
-                painter.fillRect(100, int(y), col1_w + col2_w, h, QColor(240, 240, 240))
+                painter.fillRect(int(100*sf), int(y), int(col1_w + col2_w), int(h), QColor(240, 240, 240))
             
-            painter.drawText(150, int(y + h*0.7), label)
-            painter.drawText(150 + col1_w, int(y + h*0.7), val)
+            painter.drawText(int(120*sf), int(y + h*0.65), label)
+            painter.drawText(int(120*sf + col1_w), int(y + h*0.65), val)
             
             # Add color swatch for MAT COLOR row
             if label == "MAT COLOR":
                 fm = painter.fontMetrics()
                 text_w = fm.horizontalAdvance(val)
-                sw_w, sw_h = 480, 150
-                sw_x = 150 + col1_w + text_w + 100
-                sw_y = int(y + h*0.7 - sw_h)
+                sw_w, sw_h = int(80*sf), int(50*sf)
+                sw_x = int(120*sf + col1_w + text_w + 40*sf)
+                sw_y = int(y + h*0.65 - sw_h + 10*sf)
                 
                 # Draw swatch
-                painter.setPen(QPen(Qt.GlobalColor.black, 2))
+                painter.setPen(QPen(Qt.GlobalColor.black, max(1, int(2*sf))))
                 painter.setBrush(d.get('col_mat', Qt.GlobalColor.white))
                 painter.drawRect(sw_x, sw_y, sw_w, sw_h)
                 painter.setBrush(Qt.BrushStyle.NoBrush) # Reset brush
             
             y += h
         
-        avail_w, avail_h = writer.width(), writer.height() - y - 1000
-        scale = min(avail_w * 0.6 / d['cut_w'], avail_h * 0.6 / d['cut_h'])
-        ox, oy = (writer.width() - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2 + 500
+        # Frame diagram - give it more space
+        y += 50 * sf  # Small gap after table
+        avail_w, avail_h = width, height - y - 100*sf  # Reduced bottom padding
+        scale = min(avail_w * 0.8 / d['cut_w'], avail_h * 0.85 / d['cut_h'])  # Increased from 0.6
+        ox, oy = (width - d['cut_w']*scale)/2, y + (avail_h - d['cut_h']*scale)/2
         ax, ay = ox + d['phys_left']*scale, oy + d['phys_top']*scale
-        painter.setPen(QPen(Qt.GlobalColor.black, 5)); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
+        painter.setPen(QPen(Qt.GlobalColor.black, max(1, int(5*sf)))); painter.setBrush(Qt.BrushStyle.NoBrush); painter.drawRect(QRectF(ox, oy, d['cut_w']*scale, d['cut_h']*scale))
         painter.setBrush(QColor(230, 230, 230)); painter.drawRect(QRectF(ax, ay, d['img_w']*scale, d['img_h']*scale))
         
-        # Annotate borders directly in margins
-        font.setPointSize(8); painter.setFont(font); painter.setPen(Qt.GlobalColor.black)
+        # Annotate borders directly in margins (bold + fractional formatting)
+        font.setPointSize(max(1, int(28 * sf))); font.setBold(True); painter.setFont(font); painter.setPen(Qt.GlobalColor.black)
         
         def draw_label(rect, val):
-            text = f"{val:.3f}\"" if u == "in" else f"{val*25.4:.1f}mm"
+            text = UnitUtils.format_pdf(val, u)
             fm = painter.fontMetrics()
             rect_text = fm.boundingRect(text)
             # If margin fits text with 1.5x padding
             if rect.width() > rect_text.width() * 1.5 and rect.height() > rect_text.height() * 1.5:
                 painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, text)
 
-        # Top
+        # Top border
         draw_label(QRectF(ox, oy, d['cut_w']*scale, d['phys_top']*scale), d['phys_top'])
-        # Bottom
+        # Bottom border
         draw_label(QRectF(ox, ay + d['img_h']*scale, d['cut_w']*scale, d['phys_bot']*scale), d['phys_bot'])
-        # Left
-        draw_label(QRectF(ox, oy, d['phys_left']*scale, d['cut_h']*scale), d['phys_left'])
-        # Right
-        draw_label(QRectF(ax + d['img_w']*scale, oy, d['phys_right']*scale, d['cut_h']*scale), d['phys_right'])
+        
+        # Left border - draw vertically in the left margin
+        left_text = UnitUtils.format_pdf(d['phys_left'], u)
+        painter.save()
+        left_x = ox + d['phys_left']*scale / 2
+        left_y = oy + d['cut_h']*scale / 2
+        painter.translate(left_x, left_y)
+        painter.rotate(-90)
+        fm = painter.fontMetrics()
+        left_text_w = fm.horizontalAdvance(left_text)
+        painter.drawText(int(-left_text_w/2), 0, left_text)
+        painter.restore()
+        
+        # Right border - draw vertically in the right margin
+        right_text = UnitUtils.format_pdf(d['phys_right'], u)
+        painter.save()
+        right_x = ax + d['img_w']*scale + d['phys_right']*scale / 2
+        right_y = oy + d['cut_h']*scale / 2
+        painter.translate(right_x, right_y)
+        painter.rotate(-90)
+        right_text_w = fm.horizontalAdvance(right_text)
+        painter.drawText(int(-right_text_w/2), 0, right_text)
+        painter.restore()
+        
+        # Outside cut dimensions
+        font.setPointSize(max(1, int(32 * sf))); font.setBold(True); painter.setFont(font)
+        cut_w_text = UnitUtils.format_pdf(d['cut_w'], u)
+        cut_h_text = UnitUtils.format_pdf(d['cut_h'], u)
+        
+        # Width label below diagram (horizontal)
+        fm = painter.fontMetrics()
+        w_text_rect = QRectF(ox, oy + d['cut_h']*scale + 20*sf, d['cut_w']*scale, 60*sf)
+        painter.drawText(w_text_rect, Qt.AlignmentFlag.AlignCenter, cut_w_text)
+        
+        # Height label to the right of diagram (rotated vertical)
+        painter.save()
+        # Position at right side of diagram, centered vertically
+        text_x = ox + d['cut_w']*scale + 80*sf
+        text_y = oy + d['cut_h']*scale / 2
+        painter.translate(text_x, text_y)
+        painter.rotate(-90)
+        # Draw centered at origin (which is now rotated)
+        text_width = fm.horizontalAdvance(cut_h_text)
+        painter.drawText(int(-text_width/2), 0, cut_h_text)
+        painter.restore()
+        
+        # Aperture dimensions (inside the aperture box)
+        font.setPointSize(max(1, int(28 * sf))); font.setBold(True); painter.setFont(font)
+        fm = painter.fontMetrics()
+        ap_w_text = UnitUtils.format_pdf(d['img_w'], u)
+        ap_h_text = UnitUtils.format_pdf(d['img_h'], u)
+        
+        # Aperture width label at bottom of aperture (horizontal)
+        ap_w_rect = QRectF(ax, ay + d['img_h']*scale - 50*sf, d['img_w']*scale, 40*sf)
+        painter.drawText(ap_w_rect, Qt.AlignmentFlag.AlignCenter, ap_w_text)
+        
+        # Aperture height label on right side of aperture (rotated vertical)
+        painter.save()
+        ap_text_x = ax + d['img_w']*scale - 30*sf
+        ap_text_y = ay + d['img_h']*scale / 2
+        painter.translate(ap_text_x, ap_text_y)
+        painter.rotate(-90)
+        ap_text_width = fm.horizontalAdvance(ap_h_text)
+        painter.drawText(int(-ap_text_width/2), 0, ap_h_text)
+        painter.restore()
 
-        # Page 2: Final Preview
-        writer.newPage()
-        font.setPointSize(14); font.setBold(True); painter.setFont(font)
-        painter.drawText(100, 150, "VISUAL PREVIEW")
+    def _render_pdf_page2(self, painter, width, height):
+        sf = height / 3508.0
+        font = painter.font(); font.setPointSize(max(1, int(48 * sf))); font.setBold(True); painter.setFont(font)
+        painter.drawText(int(100*sf), int(180*sf), "VISUAL PREVIEW")
         
         preview_pixmap = self.preview.pixmap()
         if preview_pixmap:
-            pw, ph = writer.width() * 0.8, writer.height() * 0.6
+            pw, ph = width * 0.8, height * 0.6
             scaled_p = preview_pixmap.scaled(int(pw), int(ph), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-            px = (writer.width() - scaled_p.width()) / 2
-            py = (writer.height() - scaled_p.height()) / 2
+            px = (width - scaled_p.width()) / 2
+            py = (height - scaled_p.height()) / 2
             painter.drawPixmap(int(px), int(py), scaled_p)
-        
-        painter.end(); del painter; del writer
-        QMessageBox.information(self, "Export Complete", f"Blueprint saved to: {fn}")
 
     def save_as_defaults(self):
         settings = QSettings("MattG", "FrameTamer")

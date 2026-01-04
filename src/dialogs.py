@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel,
                              QFrame, QWidget, QMessageBox, QColorDialog,
                              QGridLayout, QGroupBox, QRadioButton, QButtonGroup, 
                              QFormLayout, QScrollArea)
-from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal, QTimer, QSettings
+from PyQt6.QtCore import Qt, QRect, QRectF, QPointF, QEvent, QSize, QThread, pyqtSignal, QTimer, QSettings, QPoint
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QTransform, QIcon, QImage, QFont, QPdfWriter, QPageSize
 import os
 import threading
@@ -895,3 +895,85 @@ class ProfessionalColorPickerDialog(QColorDialog):
     def update_name(self, color):
         name = ColorUtils.get_closest_name(color)
         self.lbl_name.setText(f"{self.prefix.upper()}: {name.upper()}")
+
+class PDFPreviewDialog(QDialog):
+    def __init__(self, page_blueprint, page_visual, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("PDF Export Preview")
+        self.resize(680, 700)
+        self.setMaximumHeight(750)
+        self.setStyleSheet("background-color: #1a1a1a; color: #ddd;")
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+        
+        lbl_head = QLabel("<b>Review Blueprint and Visual Preview</b>")
+        lbl_head.setStyleSheet("font-size: 14px; color: #ffc107;")
+        layout.addWidget(lbl_head)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("background-color: #2b2b2b; border-radius: 6px;")
+        
+        container = QWidget()
+        c_layout = QVBoxLayout(container)
+        c_layout.setSpacing(15)
+        c_layout.setContentsMargins(10, 10, 10, 10)
+        c_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Scale images to fit in the dialog (A4 aspect ratio ~0.707)
+        preview_width = 500
+        preview_height = int(preview_width / 0.707)  # ~707
+        
+        # Blueprint Page
+        lbl_p1 = QLabel("PAGE 1: TECHNICAL BLUEPRINT")
+        lbl_p1.setStyleSheet("color: #888; font-weight: bold; font-size: 10px;")
+        c_layout.addWidget(lbl_p1)
+        
+        self.img_blueprint = QLabel()
+        scaled_bp = page_blueprint.scaled(preview_width, preview_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.img_blueprint.setPixmap(scaled_bp)
+        self.img_blueprint.setStyleSheet("border: 1px solid #444; background: white;")
+        self.img_blueprint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        c_layout.addWidget(self.img_blueprint)
+        
+        # Divider
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background: #444; min-height: 1px;")
+        c_layout.addWidget(line)
+        
+        # Visual Preview Page
+        lbl_p2 = QLabel("PAGE 2: VISUAL PREVIEW")
+        lbl_p2.setStyleSheet("color: #888; font-weight: bold; font-size: 10px;")
+        c_layout.addWidget(lbl_p2)
+        
+        self.img_visual = QLabel()
+        scaled_vis = page_visual.scaled(preview_width, preview_height, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.img_visual.setPixmap(scaled_vis)
+        self.img_visual.setStyleSheet("border: 1px solid #444; background: white;")
+        self.img_visual.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        c_layout.addWidget(self.img_visual)
+        
+        scroll.setWidget(container)
+        layout.addWidget(scroll, 1)  # Give scroll area stretch priority
+        
+        # Buttons - fixed at bottom
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.setFixedWidth(100)
+        btn_cancel.setStyleSheet("padding: 8px; background-color: #444; color: white;")
+        btn_cancel.clicked.connect(self.reject)
+        
+        self.btn_save = QPushButton("Save PDF")
+        self.btn_save.setFixedWidth(150)
+        self.btn_save.setStyleSheet("padding: 8px; background-color: #d83b01; color: white; font-weight: bold;")
+        self.btn_save.clicked.connect(self.accept)
+        
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addWidget(self.btn_save)
+        layout.addLayout(btn_layout)

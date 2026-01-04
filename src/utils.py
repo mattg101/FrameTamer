@@ -19,6 +19,37 @@ class UnitUtils:
     def format_dual(val_in, mode):
         mm = val_in * 25.4
         return f"{val_in:.3f}\" ({mm:.1f}mm)" if mode == "in" else f"{mm:.1f}mm ({val_in:.3f}\")"
+    
+    @staticmethod
+    def format_pdf(val_in, mode):
+        """Format for PDF: fractions (1/16) with LCD for inches, 0.5mm rounding for mm."""
+        # Round mm to nearest 0.5
+        mm_val = val_in * 25.4
+        mm_rounded = round(mm_val * 2) / 2  # Round to 0.5
+        mm_str = f"{mm_rounded:.1f}mm" if mm_rounded != int(mm_rounded) else f"{int(mm_rounded)}mm"
+        
+        # Round inches to nearest 1/16 and convert to fraction
+        sixteenths = round(val_in * 16)
+        whole = sixteenths // 16
+        frac = sixteenths % 16
+        
+        # Reduce fraction to lowest common denominator
+        def gcd(a, b):
+            while b: a, b = b, a % b
+            return a
+        
+        if frac == 0:
+            in_str = f'{whole}"'
+        else:
+            g = gcd(frac, 16)
+            num = frac // g
+            den = 16 // g
+            if whole == 0:
+                in_str = f'{num}/{den}"'
+            else:
+                in_str = f'{whole}-{num}/{den}"'
+        
+        return f"{in_str} ({mm_str})" if mode == "in" else f"{mm_str} ({in_str})"
 
 def draw_physical_grid(painter, rect, px_per_inch, unit_mode, w_px, h_px):
     if px_per_inch < 10: return 
