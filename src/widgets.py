@@ -293,8 +293,6 @@ class FramePreviewLabel(QLabel):
             if tex_h > 0 and tex_w > 0 and face_px > 0:
                 strip_h = frame_tex.scaled(render_w, face_px, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
                 strip_v = frame_tex.transformed(QTransform().rotate(90)).scaled(face_px, render_h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                strip_h_flip = strip_h.transformed(QTransform(-1, 0, 0, 1, strip_h.width(), 0))
-                strip_v_flip = strip_v.transformed(QTransform(1, 0, 0, -1, 0, strip_v.height()))
 
                 path = QPainterPath()
                 path.addPolygon(polys[0])
@@ -302,11 +300,11 @@ class FramePreviewLabel(QLabel):
 
                 path = QPainterPath()
                 path.addPolygon(polys[1])
-                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, render_h - face_px, strip_h_flip); painter.restore()
+                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, render_h - face_px, strip_h); painter.restore()
 
                 path = QPainterPath()
                 path.addPolygon(polys[2])
-                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, 0, strip_v_flip); painter.restore()
+                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, 0, strip_v); painter.restore()
 
                 path = QPainterPath()
                 path.addPolygon(polys[3])
