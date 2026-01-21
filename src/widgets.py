@@ -289,20 +289,27 @@ class FramePreviewLabel(QLabel):
         
         if frame_tex:
             tex_h = frame_tex.height()
-            if tex_h > 0 and face_px > 0:
-                tex_w = frame_tex.width()
-                scale_thickness = face_px / tex_h
-                scale_thickness_v = face_px / tex_w if tex_w > 0 else 1.0
-                brush_h = QBrush(frame_tex); brush_h.setTransform(QTransform().scale(1.0, scale_thickness))
+            tex_w = frame_tex.width()
+            if tex_h > 0 and tex_w > 0 and face_px > 0:
+                strip_h = frame_tex.scaled(render_w, face_px, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                strip_v = frame_tex.transformed(QTransform().rotate(90)).scaled(render_h, face_px, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
-                base_v = QTransform().rotate(90).scale(scale_thickness_v, 1.0)
-                brush_v_right = QBrush(frame_tex); brush_v_right.setTransform(base_v)
-                brush_v_left = QBrush(frame_tex); brush_v_left.setTransform(base_v)
-                
-                painter.setBrush(brush_h); painter.drawPolygon(polys[0]); painter.drawPolygon(polys[1])
-                painter.setBrush(brush_v_left); painter.drawPolygon(polys[2])
-                painter.setBrush(brush_v_right); painter.drawPolygon(polys[3])
-                
+                path = QPainterPath()
+                path.addPolygon(polys[0])
+                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, 0, strip_h); painter.restore()
+
+                path = QPainterPath()
+                path.addPolygon(polys[1])
+                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, render_h - face_px, strip_h); painter.restore()
+
+                path = QPainterPath()
+                path.addPolygon(polys[2])
+                painter.save(); painter.setClipPath(path); painter.drawPixmap(0, 0, strip_v); painter.restore()
+
+                path = QPainterPath()
+                path.addPolygon(polys[3])
+                painter.save(); painter.setClipPath(path); painter.drawPixmap(render_w - face_px, 0, strip_v); painter.restore()
+
                 painter.setPen(QPen(QColor(0,0,0,50), 1))
                 painter.drawLine(otl, itl); painter.drawLine(otr, itr); painter.drawLine(obl, ibl); painter.drawLine(obr, ibr)
         else:
