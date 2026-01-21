@@ -290,10 +290,12 @@ class FramePreviewLabel(QLabel):
         if frame_tex:
             tex_h = frame_tex.height()
             if tex_h > 0 and face_px > 0:
+                tex_w = frame_tex.width()
                 scale_thickness = face_px / tex_h
+                scale_thickness_v = face_px / tex_w if tex_w > 0 else 1.0
                 brush_h = QBrush(frame_tex); brush_h.setTransform(QTransform().scale(1.0, scale_thickness))
 
-                base_v = QTransform().rotate(90).scale(scale_thickness, 1.0)
+                base_v = QTransform().rotate(90).scale(scale_thickness_v, 1.0)
                 brush_v_right = QBrush(frame_tex); brush_v_right.setTransform(base_v)
                 brush_v_left = QBrush(frame_tex); brush_v_left.setTransform(base_v)
                 
