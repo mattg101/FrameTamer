@@ -23,6 +23,7 @@ class TextureSamplerDialog(QDialog):
         self.pixmap_orig = None
         self.pixmap_rotated = None # Cache rotated version
         self.selection_norm = QRectF(0.2, 0.2, 0.6, 0.1) 
+        self.texture_side = None
         
         # View State
         self.zoom = 1.0
@@ -60,6 +61,26 @@ class TextureSamplerDialog(QDialog):
         self.lbl_preview.installEventFilter(self)
         layout.addWidget(self.lbl_preview, 1)
 
+        # Side selection
+        side_row = QHBoxLayout()
+        side_row.addWidget(QLabel("Texture Side:"))
+        self.side_group = QButtonGroup(self)
+        self.rb_side_top = QRadioButton("Top")
+        self.rb_side_bottom = QRadioButton("Bottom")
+        self.rb_side_left = QRadioButton("Left")
+        self.rb_side_right = QRadioButton("Right")
+        for rb, side in [
+            (self.rb_side_top, "top"),
+            (self.rb_side_bottom, "bottom"),
+            (self.rb_side_left, "left"),
+            (self.rb_side_right, "right"),
+        ]:
+            self.side_group.addButton(rb)
+            rb.toggled.connect(lambda checked, s=side: self.set_texture_side(s, checked))
+            side_row.addWidget(rb)
+        side_row.addStretch()
+        layout.addLayout(side_row)
+
         # Bottom Controls
         h_ctrl = QHBoxLayout()
         
@@ -76,13 +97,15 @@ class TextureSamplerDialog(QDialog):
         btn_reset = QPushButton("Reset View"); btn_reset.clicked.connect(self.reset_view)
         h_ctrl.addWidget(btn_reset)
 
-        btn_ok = QPushButton("Use Texture"); btn_ok.clicked.connect(self.accept)
-        btn_ok.setStyleSheet("background-color: #0078d7; font-weight: bold; padding: 5px 15px;")
-        h_ctrl.addWidget(btn_ok)
+        self.btn_ok = QPushButton("Use Texture"); self.btn_ok.clicked.connect(self.accept)
+        self.btn_ok.setStyleSheet("background-color: #0078d7; font-weight: bold; padding: 5px 15px;")
+        self.btn_ok.setEnabled(False)
+        h_ctrl.addWidget(self.btn_ok)
         
-        btn_save = QPushButton("Save to Library"); btn_save.clicked.connect(self.save_to_library)
-        btn_save.setStyleSheet("background-color: #28a745; color: white; padding: 5px 15px;")
-        h_ctrl.addWidget(btn_save)
+        self.btn_save = QPushButton("Save to Library"); self.btn_save.clicked.connect(self.save_to_library)
+        self.btn_save.setStyleSheet("background-color: #28a745; color: white; padding: 5px 15px;")
+        self.btn_save.setEnabled(False)
+        h_ctrl.addWidget(self.btn_save)
         
         layout.addLayout(h_ctrl)
         
@@ -141,6 +164,12 @@ class TextureSamplerDialog(QDialog):
         
         # FIX: Do NOT reset view here, just update display to keep zoom/pan
         self.update_display()
+
+    def set_texture_side(self, side, checked):
+        if not checked: return
+        self.texture_side = side
+        self.btn_ok.setEnabled(True)
+        self.btn_save.setEnabled(True)
 
     def get_transforms(self):
         """Returns (draw_rect, scale) for the image on the label"""
@@ -371,18 +400,26 @@ class TextureSamplerDialog(QDialog):
 
     def get_texture(self):
         if not self.pixmap_rotated: return None
+        if not self.texture_side: return None
         w, h = self.pixmap_rotated.width(), self.pixmap_rotated.height()
         r = QRectF(self.selection_norm.x()*w, self.selection_norm.y()*h, 
                    self.selection_norm.width()*w, self.selection_norm.height()*h).toRect()
         if r.width() < 1 or r.height() < 1: return None
         
         crop = self.pixmap_rotated.copy(r)
-        
-        # If vertical member (height > width), rotate 90 deg for tiling
-        if crop.height() > crop.width():
-            t = QTransform().rotate(90)
+
+        if self.texture_side == "bottom":
+            t = QTransform(1, 0, 0, -1, 0, crop.height())
             crop = crop.transformed(t, Qt.TransformationMode.SmoothTransformation)
-            
+        elif self.texture_side == "left":
+            t = QTransform(0, 1, 1, 0, 0, 0)
+            crop = crop.transformed(t, Qt.TransformationMode.SmoothTransformation)
+        elif self.texture_side == "right":
+            t = QTransform(-1, 0, 0, 1, crop.width(), 0)
+            crop = crop.transformed(t, Qt.TransformationMode.SmoothTransformation)
+            t = QTransform(0, 1, 1, 0, 0, 0)
+            crop = crop.transformed(t, Qt.TransformationMode.SmoothTransformation)
+
         return crop
     
     def resizeEvent(self, event): self.update_display(); super().resizeEvent(event)
