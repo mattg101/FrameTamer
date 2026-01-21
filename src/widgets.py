@@ -290,13 +290,12 @@ class FramePreviewLabel(QLabel):
         if frame_tex:
             tex_h = frame_tex.height()
             if tex_h > 0 and face_px > 0:
-                scale_y = face_px / tex_h
-                brush_h = QBrush(frame_tex); brush_h.setTransform(QTransform().scale(1.0, scale_y))
+                scale_thickness = face_px / tex_h
+                brush_h = QBrush(frame_tex); brush_h.setTransform(QTransform().scale(1.0, scale_thickness))
 
-                base_v = QTransform().rotate(90).scale(1.0, scale_y)
-                mirror_world = QTransform(-1, 0, 0, 1, face_px, 0)
+                base_v = QTransform().rotate(90).scale(scale_thickness, 1.0)
                 brush_v_right = QBrush(frame_tex); brush_v_right.setTransform(base_v)
-                brush_v_left = QBrush(frame_tex); brush_v_left.setTransform(mirror_world * base_v)
+                brush_v_left = QBrush(frame_tex); brush_v_left.setTransform(base_v)
                 
                 painter.setBrush(brush_h); painter.drawPolygon(polys[0]); painter.drawPolygon(polys[1])
                 painter.setBrush(brush_v_left); painter.drawPolygon(polys[2])
