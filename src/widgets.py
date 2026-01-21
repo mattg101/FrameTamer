@@ -292,7 +292,7 @@ class FramePreviewLabel(QLabel):
             tex_w = frame_tex.width()
             if tex_h > 0 and tex_w > 0 and face_px > 0:
                 strip_h = frame_tex.scaled(render_w, face_px, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                strip_v = frame_tex.transformed(QTransform().rotate(90)).scaled(render_h, face_px, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                strip_v = frame_tex.transformed(QTransform().rotate(90)).scaled(face_px, render_h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
 
                 path = QPainterPath()
                 path.addPolygon(polys[0])
