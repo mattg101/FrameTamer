@@ -292,10 +292,15 @@ class FramePreviewLabel(QLabel):
             if tex_h > 0 and face_px > 0:
                 scale_y = face_px / tex_h
                 brush_h = QBrush(frame_tex); brush_h.setTransform(QTransform().scale(1.0, scale_y))
-                brush_v = QBrush(frame_tex); brush_v.setTransform(QTransform().rotate(90).scale(1.0, scale_y))
+
+                base_v = QTransform().rotate(90).scale(1.0, scale_y)
+                mirror_v = QTransform(-1, 0, 0, 1, tex_h, 0)
+                brush_v_right = QBrush(frame_tex); brush_v_right.setTransform(base_v)
+                brush_v_left = QBrush(frame_tex); brush_v_left.setTransform(mirror_v * base_v)
                 
                 painter.setBrush(brush_h); painter.drawPolygon(polys[0]); painter.drawPolygon(polys[1])
-                painter.setBrush(brush_v); painter.drawPolygon(polys[2]); painter.drawPolygon(polys[3])
+                painter.setBrush(brush_v_left); painter.drawPolygon(polys[2])
+                painter.setBrush(brush_v_right); painter.drawPolygon(polys[3])
                 
                 painter.setPen(QPen(QColor(0,0,0,50), 1))
                 painter.drawLine(otl, itl); painter.drawLine(otr, itr); painter.drawLine(obl, ibl); painter.drawLine(obr, ibr)
