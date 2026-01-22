@@ -365,7 +365,7 @@ class FrameApp(QMainWindow):
 
     def setup_controls_content(self):
         # 1. Source Media Group
-        self.group_media = CollapsibleBox("Source Media", color="#1e5a8a", start_expanded=True)
+        self.group_media = CollapsibleBox("Select Artwork", color="#1e5a8a", start_expanded=True)
         l_media = QVBoxLayout(); l_media.setSpacing(6)
         
         h_import = QHBoxLayout()
@@ -380,7 +380,7 @@ class FrameApp(QMainWindow):
         self.c_layout.addWidget(self.group_media)
 
         # 2. Frame Dimensions Group
-        self.group_frame_dims = CollapsibleBox("Frame Dimensions", color="#5a3d8a")
+        self.group_frame_dims = CollapsibleBox("Frame Dimensions", color="#3d6a8a")
         l_frame_dims = QVBoxLayout(); l_frame_dims.setSpacing(8)
         
         # Frame Aperture
@@ -420,7 +420,7 @@ class FrameApp(QMainWindow):
         self.c_layout.addWidget(self.group_frame_dims)
 
         # 3. Mat Dimensions Group
-        self.group_mat_dims = CollapsibleBox("Mat Dimensions", color="#5a3d8a")
+        self.group_mat_dims = CollapsibleBox("Mat Dimensions", color="#3d8a5a")
         l_mat_dims = QVBoxLayout(); l_mat_dims.setSpacing(8)
 
         # Mat Rules

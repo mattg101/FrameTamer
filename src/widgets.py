@@ -423,7 +423,7 @@ class MetricCard(QFrame):
             }
             QLabel { color: #ddd; font-size: 11px; }
             QLabel.header { font-size: 12px; font-weight: bold; color: #ffffff; margin-top: 4px; }
-            QLabel.primary { font-size: 20px; font-weight: bold; color: #ffffff; }
+            QLabel.primary { font-size: 11px; font-weight: bold; color: #ffffff; }
         """)
         self.setMinimumWidth(300)
         self.setMaximumWidth(310)
@@ -431,8 +431,8 @@ class MetricCard(QFrame):
         layout = QVBoxLayout(self)
         layout.setSpacing(6)
         
-        # Section 1: Final Frame Dimension
-        self.lbl_head_final = QLabel("FINAL FRAME DIMENSION")
+        # Section 1: Frame Specs
+        self.lbl_head_final = QLabel("FRAME SPECS")
         self.lbl_head_final.setProperty("class", "header")
         layout.addWidget(self.lbl_head_final)
         
@@ -476,7 +476,7 @@ class MetricCard(QFrame):
         u = data.get('unit', 'in')
         
         ow, oh = data.get('outer_w', 0), data.get('outer_h', 0)
-        self.lbl_primary.setText(f"{UnitUtils.format_dual(ow, u)} x {UnitUtils.format_dual(oh, u)}")
+        self.lbl_primary.setText(f"<b>Outer Dimension:</b> {UnitUtils.format_dual(ow, u)} x {UnitUtils.format_dual(oh, u)}")
         
         cw, ch = data.get('cut_w', 0), data.get('cut_h', 0)
         self.lbl_cut.setText(f"<b>Cut Size:</b> {UnitUtils.format_dual(cw, u)} x {UnitUtils.format_dual(ch, u)}")
