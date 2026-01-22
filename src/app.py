@@ -376,21 +376,12 @@ class FrameApp(QMainWindow):
         h_import.addWidget(btn_import); h_import.addWidget(btn_google)
         l_media.addLayout(h_import)
         
-        v_tex = QVBoxLayout(); v_tex.setSpacing(4)
-        tex_label = "Update Frame Texture" if self.frame_texture else "Extract Frame Texture"
-        self.btn_extract_tex = QPushButton(tex_label); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
-        self.btn_lib_tex = QPushButton("Frame Texture Library"); self.btn_lib_tex.clicked.connect(self.select_from_library)
-        # User requested library at "bottom left", so stack it second in vertical or first?
-        # Stacked: Extract then Library (Library is below)
-        v_tex.addWidget(self.btn_extract_tex); v_tex.addWidget(self.btn_lib_tex)
-        l_media.addLayout(v_tex)
-        
         self.group_media.set_content_layout(l_media)
         self.c_layout.addWidget(self.group_media)
 
-        # 2. Dimensions Group
-        self.group_dims = CollapsibleBox("Dimensions", color="#5a3d8a")
-        l_dims = QVBoxLayout(); l_dims.setSpacing(8)
+        # 2. Frame Dimensions Group
+        self.group_frame_dims = CollapsibleBox("Frame Dimensions", color="#5a3d8a")
+        l_frame_dims = QVBoxLayout(); l_frame_dims.setSpacing(8)
         
         # Frame Aperture
         self.gb_frame = QGroupBox("Aperture (Visible Opening)"); gl_f = QGridLayout(); gl_f.setSpacing(4)
@@ -404,14 +395,14 @@ class FrameApp(QMainWindow):
         gl_f.addLayout(h_preset, 2, 0, 1, 2)
         btn_swap = QPushButton("Swap W/H"); btn_swap.clicked.connect(self.swap_frame_dims)
         gl_f.addWidget(btn_swap, 3, 0, 1, 2)
-        self.gb_frame.setLayout(gl_f); l_dims.addWidget(self.gb_frame)
+        self.gb_frame.setLayout(gl_f); l_frame_dims.addWidget(self.gb_frame)
         self.refresh_preset_list()
 
         # Frame Profile
         self.gb_profile = QGroupBox("Frame Profile"); gl_p = QGridLayout(); gl_p.setSpacing(4)
         self.spin_face = self._add_spin(gl_p, 0, "Face Width:", 0.75)
         self.spin_rabbet = self._add_spin(gl_p, 1, "Rabbet Width:", 0.25)
-        self.gb_profile.setLayout(gl_p); l_dims.addWidget(self.gb_profile)
+        self.gb_profile.setLayout(gl_p); l_frame_dims.addWidget(self.gb_profile)
 
         # Art Specs
         self.gb_art_specs = QGroupBox("Art Physical Dimensions"); gl_a = QGridLayout(); gl_a.setSpacing(4)
@@ -423,7 +414,14 @@ class FrameApp(QMainWindow):
         self.spin_art_h = self._add_spin(gl_a, 1, "H:", 8.0, extra=self.rb_driver_h)
         self.spin_art_w.valueChanged.connect(self.on_art_w_changed)
         self.spin_art_h.valueChanged.connect(self.on_art_h_changed)
-        self.gb_art_specs.setLayout(gl_a); l_dims.addWidget(self.gb_art_specs)
+        self.gb_art_specs.setLayout(gl_a); l_frame_dims.addWidget(self.gb_art_specs)
+
+        self.group_frame_dims.set_content_layout(l_frame_dims)
+        self.c_layout.addWidget(self.group_frame_dims)
+
+        # 3. Mat Dimensions Group
+        self.group_mat_dims = CollapsibleBox("Mat Dimensions", color="#5a3d8a")
+        l_mat_dims = QVBoxLayout(); l_mat_dims.setSpacing(8)
 
         # Mat Rules
         self.gb_mat_rules = QGroupBox("Mat Rules"); l_mr = QFormLayout()
@@ -436,7 +434,7 @@ class FrameApp(QMainWindow):
         l_mr.addRow("Constraint:", self.combo_fix); l_mr.addRow("Fixed Size:", self.spin_fix_val)
         l_mr.addRow("", self.chk_link); l_mr.addRow("Min Gutter:", self.spin_min_gutter)
         l_mr.addRow("Alignment:", self.combo_align)
-        self.gb_mat_rules.setLayout(l_mr); l_dims.addWidget(self.gb_mat_rules)
+        self.gb_mat_rules.setLayout(l_mr); l_mat_dims.addWidget(self.gb_mat_rules)
 
         # Mat Borders
         self.gb_mat_dims = QGroupBox("Visible Mat Borders"); gl_md = QGridLayout()
@@ -453,17 +451,17 @@ class FrameApp(QMainWindow):
         gl_md.addWidget(QLabel("Left:"), 3, 0); gl_md.addWidget(self.spin_mat_l, 3, 1)
         gl_md.addWidget(QLabel("Right:"), 4, 0); gl_md.addWidget(self.spin_mat_r, 4, 1)
         gl_md.addWidget(self.chk_link_all, 5, 0, 1, 2)
-        self.gb_mat_dims.setLayout(gl_md); l_dims.addWidget(self.gb_mat_dims)
+        self.gb_mat_dims.setLayout(gl_md); l_mat_dims.addWidget(self.gb_mat_dims)
         
         # Mounting
         gb_mnt = QGroupBox("Mounting"); l_mnt = QFormLayout()
         self.spin_print_border = self._create_spin(0.25); l_mnt.addRow("Print Border:", self.spin_print_border)
-        gb_mnt.setLayout(l_mnt); l_dims.addWidget(gb_mnt)
+        gb_mnt.setLayout(l_mnt); l_mat_dims.addWidget(gb_mnt)
 
-        self.group_dims.set_content_layout(l_dims)
-        self.c_layout.addWidget(self.group_dims)
+        self.group_mat_dims.set_content_layout(l_mat_dims)
+        self.c_layout.addWidget(self.group_mat_dims)
 
-        # 3. Appearance Group
+        # 4. Appearance Group
         self.group_app = CollapsibleBox("Appearance", color="#8a5a1e")
         l_app = QVBoxLayout()
         h_col = QHBoxLayout(); 
@@ -475,6 +473,13 @@ class FrameApp(QMainWindow):
         
         h_col.addLayout(v_mc); h_col.addLayout(v_fc)
         l_app.addLayout(h_col)
+
+        v_tex = QVBoxLayout(); v_tex.setSpacing(4)
+        tex_label = "Update Frame Texture" if self.frame_texture else "Extract Frame Texture"
+        self.btn_extract_tex = QPushButton(tex_label); self.btn_extract_tex.clicked.connect(self.load_frame_texture)
+        self.btn_lib_tex = QPushButton("Frame Texture Library"); self.btn_lib_tex.clicked.connect(self.select_from_library)
+        v_tex.addWidget(self.btn_extract_tex); v_tex.addWidget(self.btn_lib_tex)
+        l_app.addLayout(v_tex)
 
         l_mat_info = QFormLayout()
         self.combo_mat_ply = QComboBox()
